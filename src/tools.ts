@@ -420,7 +420,7 @@ async function execBash(command: string, workDir: string, timeoutSec?: number): 
         let result = '';
         const outStr = typeof stdout === 'string' ? stdout : stdout?.toString() ?? '';
         const errStr = typeof stderr === 'string' ? stderr : stderr?.toString() ?? '';
-        const exitCode = error ? (error as any).code ?? 1 : 0;
+        const exitCode = error ? ((error as { code?: number }).code ?? 1) : 0;
         if (outStr.trim()) result += outStr.trim();
         if (errStr.trim()) {
           if (result) result += '\n';
@@ -447,8 +447,8 @@ async function readFileTool(
   let fullPath: string;
   try {
     fullPath = safeResolve(workDir, path);
-  } catch (err: any) {
-    return `Error: ${err.message}`;
+  } catch (err: unknown) {
+    return `Error: ${(err as Error).message}`;
   }
 
   try {
@@ -503,8 +503,8 @@ async function editFileTool(
   let fullPath: string;
   try {
     fullPath = safeResolve(workDir, path);
-  } catch (err: any) {
-    return `Error: ${err.message}`;
+  } catch (err: unknown) {
+    return `Error: ${(err as Error).message}`;
   }
 
   let content: string;
@@ -567,8 +567,8 @@ async function writeFileTool(path: string, content: string, workDir: string): Pr
   let fullPath: string;
   try {
     fullPath = safeResolve(workDir, path);
-  } catch (err: any) {
-    return `Error: ${err.message}`;
+  } catch (err: unknown) {
+    return `Error: ${(err as Error).message}`;
   }
   await mkdir(dirname(fullPath), { recursive: true });
   await writeFile(fullPath, content, 'utf-8');
@@ -581,8 +581,8 @@ async function lsTool(path: string | undefined, workDir: string): Promise<string
   let dir: string;
   try {
     dir = safeResolve(workDir, path || '.');
-  } catch (err: any) {
-    return `Error: ${err.message}`;
+  } catch (err: unknown) {
+    return `Error: ${(err as Error).message}`;
   }
   try {
     const entries = await readdir(dir, { withFileTypes: true });
@@ -620,8 +620,8 @@ async function lsTool(path: string | undefined, workDir: string): Promise<string
     });
 
     return truncateOutput(`${dir}:\n${lines.join('\n')}`).text;
-  } catch (err: any) {
-    return `Error listing ${dir}: ${err.message}`;
+  } catch (err: unknown) {
+    return `Error listing ${dir}: ${(err as Error).message}`;
   }
 }
 
@@ -633,8 +633,8 @@ async function findTool(
   let base: string;
   try {
     base = safeResolve(workDir, searchPath || '.');
-  } catch (err: any) {
-    return `Error: ${err.message}`;
+  } catch (err: unknown) {
+    return `Error: ${(err as Error).message}`;
   }
   const SKIP_DIRS = new Set([
     'node_modules', '.git', 'dist', 'build', '__pycache__', '.venv', 'venv',
@@ -687,8 +687,8 @@ async function findTool(
 
   try {
     await walk(base, 0);
-  } catch (err: any) {
-    return `Error finding files: ${err.message}`;
+  } catch (err: unknown) {
+    return `Error finding files: ${(err as Error).message}`;
   }
 
   if (results.length === 0) return `No files matching "${pattern}" found.`;
@@ -706,8 +706,8 @@ async function grepTool(
   let base: string;
   try {
     base = safeResolve(workDir, searchPath || '.');
-  } catch (err: any) {
-    return `Error: ${err.message}`;
+  } catch (err: unknown) {
+    return `Error: ${(err as Error).message}`;
   }
   const SKIP_DIRS = new Set([
     'node_modules', '.git', 'dist', 'build', '__pycache__', '.venv', 'venv',
@@ -719,8 +719,8 @@ async function grepTool(
   let regex: RegExp;
   try {
     regex = new RegExp(pattern, 'gi');
-  } catch (err: any) {
-    return `Error: Invalid regex pattern: ${err.message}`;
+  } catch (err: unknown) {
+    return `Error: Invalid regex pattern: ${(err as Error).message}`;
   }
 
   const results: string[] = [];
@@ -787,8 +787,8 @@ async function grepTool(
     } else {
       await walk(base, 0);
     }
-  } catch (err: any) {
-    return `Error searching: ${err.message}`;
+  } catch (err: unknown) {
+    return `Error searching: ${(err as Error).message}`;
   }
 
   if (results.length === 0) return `No matches for "${pattern}" found.`;
@@ -803,8 +803,8 @@ async function statTool(path: string, workDir: string): Promise<string> {
   let fullPath: string;
   try {
     fullPath = safeResolve(workDir, path);
-  } catch (err: any) {
-    return `Error: ${err.message}`;
+  } catch (err: unknown) {
+    return `Error: ${(err as Error).message}`;
   }
   try {
     const s = await fsStat(fullPath);
@@ -846,11 +846,11 @@ async function statTool(path: string, workDir: string): Promise<string> {
     }
     parts.push(`  type: other`);
     return parts.join('\n');
-  } catch (err: any) {
-    if (err.code === 'ENOENT') {
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
       return `[not-found] ${fullPath} does not exist.`;
     }
-    return `Error: [stat-failed] ${fullPath}: ${err.message}`;
+    return `Error: [stat-failed] ${fullPath}: ${(err as Error).message}`;
   }
 }
 
@@ -931,8 +931,8 @@ async function webSearchTool(query: string, count?: number): Promise<string> {
   let json: DDGResponse;
   try {
     json = await httpsGetJSON(ddgUrl, 10000) as DDGResponse;
-  } catch (err: any) {
-    return `Error: Web search failed — ${err.message || err}`;
+  } catch (err: unknown) {
+    return `Error: Web search failed — ${(err as Error).message || String(err)}`;
   }
 
   const parts: string[] = [];
@@ -1147,8 +1147,8 @@ async function docsSearchTool(
   let json: DDGResponse;
   try {
     json = await httpsGetJSON(ddgUrl, 10000) as DDGResponse;
-  } catch (err: any) {
-    return `Error: Docs search failed — ${err.message || err}`;
+  } catch (err: unknown) {
+    return `Error: Docs search failed — ${(err as Error).message || String(err)}`;
   }
 
   const parts: string[] = [];
@@ -1294,11 +1294,11 @@ export async function executeTool(
         break;
       // ls and diff have no required arguments — no validation needed
     }
-  } catch (validationErr: any) {
+  } catch (validationErr: unknown) {
     return {
       tool_call_id: id,
       role: 'tool',
-      content: `Error: ${validationErr.message}`,
+      content: `Error: ${(validationErr as Error).message}`,
     };
   }
 

@@ -9,6 +9,22 @@ import { createSpinner, Spinner } from './spinner.js';
 const MAX_TURNS = 500;
 const MAX_OUTPUT_TOKENS = 393_216; // 384K max output tokens (DeepSeek limit)
 
+// ── OpenAI streaming chunk types ────────────────────────────────────
+
+interface StreamDelta {
+  content?: string;
+  tool_calls?: Array<{
+    index?: number;
+    id?: string;
+    function?: { name?: string; arguments?: string };
+  }>;
+}
+
+interface StreamChunk {
+  choices?: Array<{ delta?: StreamDelta }>;
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+}
+
 // ── Terminal display helpers ────────────────────────────────────────
 
 const COL = (): number => process.stdout.columns || 80;
@@ -113,16 +129,17 @@ async function withRetry<T>(
   maxRetries = 3,
   baseDelay = 1000,
 ): Promise<T> {
-  let lastErr: any;
+  let lastErr: unknown;
   for (let i = 0; i <= maxRetries; i++) {
     try {
       return await fn();
-    } catch (err: any) {
+    } catch (err: unknown) {
       lastErr = err;
-      if (err.name === 'AbortError' || err.name === 'Canceled') throw err;
-      if (i < maxRetries && (err.status === 429 || err.status >= 500)) {
+      if (err instanceof Error && (err.name === 'AbortError' || err.name === 'Canceled')) throw err;
+      const errStatus = (err as { status?: number }).status;
+      if (i < maxRetries && (errStatus === 429 || (errStatus !== undefined && errStatus >= 500))) {
         const delay = baseDelay * Math.pow(2, i) + Math.random() * 1000;
-        process.stderr.write(`${GRUVBOX_GRAY}[retry ${i + 1}/${maxRetries}] ${err.status || 'error'}, waiting ${(delay / 1000).toFixed(1)}s...${RESET}\n`);
+        process.stderr.write(`${GRUVBOX_GRAY}[retry ${i + 1}/${maxRetries}] ${errStatus || 'error'}, waiting ${(delay / 1000).toFixed(1)}s...${RESET}\n`);
         await new Promise((r) => setTimeout(r, delay));
         continue;
       }
@@ -296,8 +313,8 @@ export async function runAgent(
     let streamUsage: { input: number; output: number; total: number } | undefined;
 
     try {
-      const stream: AsyncIterable<any> = await withRetry(async () => {
-        return client.chat.completions.create({
+      const stream = await withRetry(async () => {
+        const params: Record<string, unknown> = {
           model: config.model,
           messages,
           tools: TOOL_DEFS,
@@ -306,13 +323,15 @@ export async function runAgent(
           max_tokens: MAX_OUTPUT_TOKENS,
           stream: true,
           stream_options: { include_usage: true },
-          // Enable thinking/reasoning — DeepSeek specific params
-          ...(({
-            thinking: { type: 'enabled' },
-            reasoning_effort: 'max',
-          } as any)),
-        }) as unknown as AsyncIterable<any>;
-      }) as AsyncIterable<any>;
+        };
+        // Enable thinking/reasoning — DeepSeek specific params
+        if (config.provider === 'deepseek') {
+          params.thinking = { type: 'enabled' };
+          params.reasoning_effort = 'max';
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return client.chat.completions.create(params as any) as unknown as AsyncIterable<StreamChunk>;
+      });
 
       for await (const chunk of stream) {
         // Check cancellation mid-stream
@@ -320,14 +339,14 @@ export async function runAgent(
 
         deltaChunkCount++;
 
-        const delta = (chunk as any).choices?.[0]?.delta;
+        const delta = chunk.choices?.[0]?.delta;
         if (!delta) {
           // Usage chunk (final chunk with stream_options.include_usage)
-          if ((chunk as any).usage) {
+          if (chunk.usage) {
             streamUsage = {
-              input: (chunk as any).usage.prompt_tokens || 0,
-              output: (chunk as any).usage.completion_tokens || 0,
-              total: (chunk as any).usage.total_tokens || 0,
+              input: chunk.usage.prompt_tokens || 0,
+              output: chunk.usage.completion_tokens || 0,
+              total: chunk.usage.total_tokens || 0,
             };
           }
           continue;
@@ -355,8 +374,8 @@ export async function runAgent(
         // Throttle spinner updates during streaming (every ~50 chunks)
         if (deltaChunkCount % 50 === 0) spin.update('Thinking…');
       }
-    } catch (err: any) {
-      if (err.name === 'AbortError' || err.name === 'Canceled') {
+    } catch (err: unknown) {
+      if (err instanceof Error && (err.name === 'AbortError' || err.name === 'Canceled')) {
         spin.stop();
         const msg = '\n[Cancelled by user]';
         return { text: msg, sessionId, history: messages };

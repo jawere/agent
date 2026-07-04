@@ -35,7 +35,7 @@ tree:
     - build.js:
         type: other
         desc: "Build/bundler script."
-        size: 735
+        size: 753
   src/:
     - agent.ts:
         type: other

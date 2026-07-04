@@ -3,6 +3,15 @@ import { resolve, dirname } from 'path';
 import { mkdirSync, existsSync } from 'fs';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 
+// ── Deserialized message row (tool_calls stored as JSON string) ──
+interface DeserializedMessage {
+  role: string;
+  content?: string | null;
+  tool_calls?: string | null;
+  tool_call_id?: string | null;
+  name?: string | null;
+}
+
 // ── Types ───────────────────────────────────────────────────────────
 
 export interface SessionRow {
@@ -108,7 +117,7 @@ export function getSessionMessages(sessionId: string): ChatCompletionMessagePara
 
   const messages: ChatCompletionMessageParam[] = [];
   for (const row of rows) {
-    const msg: any = { role: row.role };
+    const msg: DeserializedMessage = { role: row.role };
 
     if (row.content !== null) {
       msg.content = row.content;
@@ -142,6 +151,27 @@ export function deleteSession(sessionId: string): boolean {
   return result.changes > 0;
 }
 
+// ── Serialization helper ────────────────────────────────────────────
+
+interface MessageRowParams {
+  role: string;
+  content: string | null;
+  tool_calls: string | null;
+  tool_call_id: string | null;
+  name: string | null;
+}
+
+function serializeMessage(m: ChatCompletionMessageParam): MessageRowParams {
+  const ext = m as unknown as Record<string, unknown>;
+  return {
+    role: m.role,
+    content: typeof m.content === 'string' ? m.content : m.content ? JSON.stringify(m.content) : null,
+    tool_calls: ext.tool_calls ? JSON.stringify(ext.tool_calls) : null,
+    tool_call_id: (ext.tool_call_id as string) || null,
+    name: (ext.name as string) || null,
+  };
+}
+
 // ── Message persistence ─────────────────────────────────────────────
 
 export function persistMessages(sessionId: string, messages: ChatCompletionMessageParam[]): void {
@@ -166,13 +196,8 @@ export function persistMessages(sessionId: string, messages: ChatCompletionMessa
   const batchInsert = db.transaction((msgs: ChatCompletionMessageParam[]) => {
     for (const m of msgs) {
       if (m.role === 'system') continue;
-
-      const content = typeof m.content === 'string' ? m.content : m.content ? JSON.stringify(m.content) : null;
-      const toolCalls = (m as any).tool_calls ? JSON.stringify((m as any).tool_calls) : null;
-      const toolCallId = (m as any).tool_call_id || null;
-      const name = (m as any).name || null;
-
-      insert.run(sessionId, m.role, content, toolCalls, toolCallId, name);
+      const s = serializeMessage(m);
+      insert.run(sessionId, s.role, s.content, s.tool_calls, s.tool_call_id, s.name);
     }
   });
 
@@ -196,11 +221,8 @@ export function replaceSessionMessages(sessionId: string, messages: ChatCompleti
     del.run(sessionId);
     for (const m of msgs) {
       if (m.role === 'system') continue;
-      const content = typeof m.content === 'string' ? m.content : m.content ? JSON.stringify(m.content) : null;
-      const toolCalls = (m as any).tool_calls ? JSON.stringify((m as any).tool_calls) : null;
-      const toolCallId = (m as any).tool_call_id || null;
-      const name = (m as any).name || null;
-      insert.run(sessionId, m.role, content, toolCalls, toolCallId, name);
+      const s = serializeMessage(m);
+      insert.run(sessionId, s.role, s.content, s.tool_calls, s.tool_call_id, s.name);
     }
   });
 
