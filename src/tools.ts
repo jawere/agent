@@ -4,6 +4,43 @@ import { constants } from 'fs';
 import { resolve, dirname } from 'path';
 import { get as httpsGet } from 'https';
 
+// ── Security helpers ───────────────────────────────────────────────
+
+/** Resolve a user-supplied path against workDir, blocking traversal escapes. */
+function safeResolve(workDir: string, userPath: string): string {
+  // Resolve to absolute path
+  const resolved = resolve(workDir, userPath);
+  const normalizedWd = resolve(workDir).replace(/\/+$/, '') + '/';
+  const normalizedResolved = resolved.replace(/\/+$/, '') + '/';
+  if (!normalizedResolved.startsWith(normalizedWd)) {
+    throw new Error(
+      `Path traversal blocked: "${userPath}" escapes the working directory. ` +
+      `All file operations must stay within ${workDir}.`,
+    );
+  }
+  return resolved;
+}
+
+/** Patterns that are never safe for an automated agent to run. */
+const DANGEROUS_COMMANDS: Array<{ pattern: RegExp; reason: string }> = [
+  { pattern: /(?:^|[;&|])\s*rm\s.*-rf\s*(?:\/|\/\*|\s+\/)/, reason: 'rm -rf on root filesystem' },
+  { pattern: /(?:^|[;&|])\s*sudo\s/, reason: 'sudo escalation' },
+  { pattern: /:.*\(.*\)\s*\{\s*:\|:.*&\s*\}\s*;\s*:/, reason: 'fork bomb' },
+  { pattern: /(?:^|[;&|])\s*(?:dd|mkfs|fdisk|parted)\s.*if=\/dev\/|of=\/dev\//, reason: 'raw device write' },
+  { pattern: /(?:^|[;&|])\s*chmod\s.*-R\s*(?:777|o\+rwx|a\+rwx)\s*(?:\/|\/etc|\/usr|\/var)/, reason: 'recursive world-writable on system dirs' },
+  { pattern: /(?:^|[;&|])\s*(?:curl|wget)\s.*\|\s*(?:ba)?sh/, reason: 'curl-pipe-shell — use safer methods' },
+  { pattern: /(?:^|[;&|])\s*git\s+push\s+--force.*main|master/, reason: 'force push to main/master' },
+];
+
+function checkDangerousCommand(command: string): string | null {
+  for (const { pattern, reason } of DANGEROUS_COMMANDS) {
+    if (pattern.test(command)) {
+      return `Blocked dangerous command (${reason}). If you need this, run it manually in your terminal.`;
+    }
+  }
+  return null;
+}
+
 // ── Types ───────────────────────────────────────────────────────────
 
 export interface ToolCall {
@@ -364,6 +401,10 @@ function truncateOutput(text: string): TruncateResult {
 }
 
 async function execBash(command: string, workDir: string, timeoutSec?: number): Promise<string> {
+  // Security check before executing
+  const blocked = checkDangerousCommand(command);
+  if (blocked) return blocked;
+
   const timeout = Math.min(timeoutSec ?? 120, 300) * 1000;
 
   return new Promise<string>((resolve) => {
@@ -403,7 +444,12 @@ async function readFileTool(
   offset?: number,
   limit?: number,
 ): Promise<string> {
-  const fullPath = resolve(workDir, path);
+  let fullPath: string;
+  try {
+    fullPath = safeResolve(workDir, path);
+  } catch (err: any) {
+    return `Error: ${err.message}`;
+  }
 
   try {
     await access(fullPath, constants.R_OK);
@@ -454,7 +500,12 @@ async function editFileTool(
   edits: Array<{ oldText: string; newText: string }>,
   workDir: string,
 ): Promise<string> {
-  const fullPath = resolve(workDir, path);
+  let fullPath: string;
+  try {
+    fullPath = safeResolve(workDir, path);
+  } catch (err: any) {
+    return `Error: ${err.message}`;
+  }
 
   let content: string;
   try {
@@ -513,7 +564,12 @@ async function editFileTool(
 }
 
 async function writeFileTool(path: string, content: string, workDir: string): Promise<string> {
-  const fullPath = resolve(workDir, path);
+  let fullPath: string;
+  try {
+    fullPath = safeResolve(workDir, path);
+  } catch (err: any) {
+    return `Error: ${err.message}`;
+  }
   await mkdir(dirname(fullPath), { recursive: true });
   await writeFile(fullPath, content, 'utf-8');
   return `Successfully wrote ${Buffer.byteLength(content, 'utf-8')} bytes to ${fullPath}`;
@@ -522,7 +578,12 @@ async function writeFileTool(path: string, content: string, workDir: string): Pr
 // ── New tools: ls, find, grep ──────────────────────────────────────
 
 async function lsTool(path: string | undefined, workDir: string): Promise<string> {
-  const dir = resolve(workDir, path || '.');
+  let dir: string;
+  try {
+    dir = safeResolve(workDir, path || '.');
+  } catch (err: any) {
+    return `Error: ${err.message}`;
+  }
   const { readdir, stat } = await import('fs/promises');
   try {
     const entries = await readdir(dir, { withFileTypes: true });
@@ -570,7 +631,12 @@ async function findTool(
   searchPath: string | undefined,
   workDir: string,
 ): Promise<string> {
-  const base = resolve(workDir, searchPath || '.');
+  let base: string;
+  try {
+    base = safeResolve(workDir, searchPath || '.');
+  } catch (err: any) {
+    return `Error: ${err.message}`;
+  }
   const SKIP_DIRS = new Set([
     'node_modules', '.git', 'dist', 'build', '__pycache__', '.venv', 'venv',
     '.next', '.cache', 'coverage', '.convex', '_generated',
@@ -639,7 +705,12 @@ async function grepTool(
   include: string | undefined,
   workDir: string,
 ): Promise<string> {
-  const base = resolve(workDir, searchPath || '.');
+  let base: string;
+  try {
+    base = safeResolve(workDir, searchPath || '.');
+  } catch (err: any) {
+    return `Error: ${err.message}`;
+  }
   const SKIP_DIRS = new Set([
     'node_modules', '.git', 'dist', 'build', '__pycache__', '.venv', 'venv',
     '.next', '.cache', '.convex', '_generated',
@@ -733,7 +804,12 @@ async function grepTool(
 // ── Stat tool ───────────────────────────────────────────────────────
 
 async function statTool(path: string, workDir: string): Promise<string> {
-  const fullPath = resolve(workDir, path);
+  let fullPath: string;
+  try {
+    fullPath = safeResolve(workDir, path);
+  } catch (err: any) {
+    return `Error: ${err.message}`;
+  }
   try {
     const s = await fsStat(fullPath);
     const parts: string[] = [`${fullPath}:`];
@@ -1172,6 +1248,63 @@ export async function executeTool(
   }
 
   let result: string;
+
+  // ── Input validation ──────────────────────────────────────────
+  try {
+    switch (fn.name) {
+      case 'bash':
+        if (typeof args.command !== 'string' || args.command.length === 0) throw new Error('bash requires a non-empty "command" (string)');
+        if (args.timeout !== undefined && typeof args.timeout !== 'number') throw new Error('bash "timeout" must be a number');
+        break;
+      case 'read':
+        if (typeof args.path !== 'string' || args.path.length === 0) throw new Error('read requires a non-empty "path" (string)');
+        if (args.offset !== undefined && typeof args.offset !== 'number') throw new Error('read "offset" must be a number');
+        if (args.limit !== undefined && typeof args.limit !== 'number') throw new Error('read "limit" must be a number');
+        break;
+      case 'edit':
+        if (typeof args.path !== 'string' || args.path.length === 0) throw new Error('edit requires a non-empty "path" (string)');
+        if (!Array.isArray(args.edits)) throw new Error('edit "edits" must be an array');
+        if (args.edits.length === 0) throw new Error('edit "edits" must be non-empty');
+        for (let i = 0; i < args.edits.length; i++) {
+          const e = args.edits[i];
+          if (typeof e.oldText !== 'string') throw new Error(`edit "edits[${i}].oldText" must be a string`);
+          if (typeof e.newText !== 'string') throw new Error(`edit "edits[${i}].newText" must be a string`);
+        }
+        break;
+      case 'write':
+        if (typeof args.path !== 'string' || args.path.length === 0) throw new Error('write requires a non-empty "path" (string)');
+        if (typeof args.content !== 'string') throw new Error('write requires "content" (string)');
+        break;
+      case 'find':
+        if (typeof args.pattern !== 'string' || args.pattern.length === 0) throw new Error('find requires a non-empty "pattern" (string)');
+        if (args.path !== undefined && typeof args.path !== 'string') throw new Error('find "path" must be a string');
+        break;
+      case 'grep':
+        if (typeof args.pattern !== 'string' || args.pattern.length === 0) throw new Error('grep requires a non-empty "pattern" (string)');
+        if (args.path !== undefined && typeof args.path !== 'string') throw new Error('grep "path" must be a string');
+        if (args.include !== undefined && typeof args.include !== 'string') throw new Error('grep "include" must be a string');
+        break;
+      case 'stat':
+        if (typeof args.path !== 'string' || args.path.length === 0) throw new Error('stat requires a non-empty "path" (string)');
+        break;
+      case 'web_search':
+        if (typeof args.query !== 'string' || args.query.length === 0) throw new Error('web_search requires a non-empty "query" (string)');
+        if (args.count !== undefined && typeof args.count !== 'number') throw new Error('web_search "count" must be a number');
+        break;
+      case 'docs':
+        if (typeof args.query !== 'string' || args.query.length === 0) throw new Error('docs requires a non-empty "query" (string)');
+        if (args.count !== undefined && typeof args.count !== 'number') throw new Error('docs "count" must be a number');
+        if (args.library !== undefined && typeof args.library !== 'string') throw new Error('docs "library" must be a string');
+        break;
+      // ls and diff have no required arguments — no validation needed
+    }
+  } catch (validationErr: any) {
+    return {
+      tool_call_id: id,
+      role: 'tool',
+      content: `Error: ${validationErr.message}`,
+    };
+  }
 
   try {
     switch (fn.name) {

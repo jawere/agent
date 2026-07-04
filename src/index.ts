@@ -184,9 +184,9 @@ async function main(): Promise<void> {
         case 'key': {
           const savedKey = await loadKey();
           if (savedKey) {
-            console.log(`Key status: saved (encrypted) — ${savedKey.slice(0, 8)}...`);
+            console.log(`Key status: saved (encrypted) — ${savedKey.slice(0, 3)}...`);
           } else if (process.env.DEEPSEEK_API_KEY) {
-            console.log(`Key status: DEEPSEEK_API_KEY env var`);
+            console.log(`Key status: DEEPSEEK_API_KEY env var (starts ${process.env.DEEPSEEK_API_KEY.slice(0, 3)}...)`);
           } else {
             console.log(`Key status: NOT SET`);
           }
