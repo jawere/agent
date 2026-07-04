@@ -239,7 +239,7 @@ export async function runAgent(
 
   if (!config.apiKey) {
     throw new Error(
-      'No API key configured. Run with --setup to save your DeepSeek API key, or set DEEPSEEK_API_KEY env var.',
+      'No API key configured. Run "jawere --setup" to configure your AI provider and key, or set AI_API_KEY env var.',
     );
   }
 

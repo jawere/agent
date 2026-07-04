@@ -4,7 +4,7 @@ import { resolve } from 'path';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { runAgent } from './agent.js';
 import { loadConfig, hasApiKey } from './config.js';
-import { saveKey, loadKey, deleteKey, hasKey } from './crypto.js';
+import { saveKey, loadKey, deleteKey, hasKey, saveConfig, type SavedConfig } from './crypto.js';
 
 import { runScanner } from './scanner.js';
 import { createPrompt } from './prompt.js';
@@ -24,11 +24,11 @@ function center(text: string, width: number): string {
   return ' '.repeat(pad) + text;
 }
 
-function printBanner(config: { model: string; isDev: boolean }) {
+function printBanner(config: { model: string; provider: string; isDev: boolean }) {
   const cols = process.stdout.columns || 60;
   const sep = G_GRAY + '─'.repeat(Math.min(cols - 2, 50)) + R;
   console.log('');
-  console.log(center(`${G_GRAY}${config.model}${R}  ${G_GRAY}${config.isDev ? 'dev' : 'prod'}${R}`, cols));
+  console.log(center(`${G_GRAY}${config.provider} / ${config.model}${R}  ${G_GRAY}${config.isDev ? 'dev' : 'prod'}${R}`, cols));
   console.log(center(sep, cols));
   console.log('');
 }
@@ -39,33 +39,85 @@ ${G_GREEN}Commands:${R}
   ${G_GRAY}/help${R}          Show this help
 
   ${G_GRAY}/key${R}           Show API key status
-  ${G_GRAY}/setup${R}         Re-enter API key
+  ${G_GRAY}/setup${R}         Re-configure AI provider & key
   ${G_GRAY}/clear${R}         Clear screen & start fresh session
   ${G_GRAY}/exit${R}, ${G_GRAY}/quit${R}   Quit
+
+${G_GREEN}CLI flags:${R}
+  ${G_GRAY}--setup${R}        Run setup wizard (provider, key, model)
 `);
 }
 
 async function setupKey(): Promise<void> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  console.log('\nEnter your DeepSeek API key (starts with sk-):');
-  const key = await new Promise<string>((resolve) => {
-    rl.question('API Key: ', (answer) => {
+  const ask = (q: string): Promise<string> => new Promise((resolve) => rl.question(q, (a) => resolve(a.trim())));
+
+  console.log('');
+  console.log(`${G_GREEN}╔══════════════════════════════════════════╗${R}`);
+  console.log(`${G_GREEN}║   jawere — Setup                         ║${R}`);
+  console.log(`${G_GREEN}╚══════════════════════════════════════════╝${R}`);
+  console.log('');
+
+  // ── Provider selection ──
+  console.log('Select AI provider:');
+  console.log(`  ${G_AQUA}1.${R} DeepSeek`);
+  console.log(`  ${G_AQUA}2.${R} OpenAI`);
+  console.log(`  ${G_AQUA}3.${R} Custom (enter base URL)`);
+  console.log('');
+
+  const choice = await ask(`Choice [1]: `) || '1';
+
+  let provider: SavedConfig['provider'] = 'deepseek';
+  let baseURL: string | undefined;
+  let defaultModel: string;
+
+  if (choice === '2') {
+    provider = 'openai';
+    defaultModel = 'gpt-4o';
+  } else if (choice === '3') {
+    provider = 'custom';
+    console.log('');
+    baseURL = await ask('Base URL (e.g. https://api.openai.com/v1): ');
+    if (!baseURL) {
+      console.log('No URL entered. Aborting setup.');
       rl.close();
-      resolve(answer.trim());
-    });
-  });
+      return;
+    }
+    defaultModel = 'gpt-4o';
+  } else {
+    provider = 'deepseek';
+    defaultModel = 'deepseek-v4-pro';
+  }
+
+  // ── API Key ──
+  console.log('');
+  const keyHint = provider === 'openai' ? 'sk-' : provider === 'deepseek' ? 'sk-' : '';
+  const hintText = keyHint ? ` (starts with ${keyHint})` : '';
+  console.log(`Enter your API key${hintText}:`);
+  const key = await ask('API Key: ');
 
   if (!key) {
     console.log('No key entered. Aborting setup.');
+    rl.close();
     return;
   }
 
-  if (!key.startsWith('sk-')) {
-    console.log('Warning: Key does not start with "sk-". Saving anyway...');
-  }
+  // ── Model ──
+  console.log('');
+  const model = await ask(`Model [${defaultModel}]: `) || defaultModel;
 
+  // ── Save ──
   await saveKey(key);
-  console.log(`API key encrypted and saved to ~/.jawere/key.enc`);
+  await saveConfig({ provider, baseURL: baseURL || undefined, model });
+
+  console.log('');
+  console.log(`${G_GREEN}Setup complete!${R}`);
+  console.log(`  Provider : ${G_AQUA}${provider}${R}`);
+  console.log(`  Model    : ${G_AQUA}${model}${R}`);
+  console.log(`  Key saved: ~/.jawere/key.enc`);
+  console.log('');
+
+  rl.close();
 }
 
 // ── Main ────────────────────────────────────────────────────────────
@@ -84,16 +136,14 @@ async function main(): Promise<void> {
 
   // Check for API key
   if (!config.apiKey) {
-    const hasExistingKey = await hasKey();
     console.log('╔══════════════════════════════════════════╗');
-    console.log('║   jawere — AI Coding Agent                  ║');
+    console.log('║        jawere — AI Coding Agent          ║');
     console.log('╠══════════════════════════════════════════╣');
     console.log('║ No API key found.                        ║');
     console.log('║                                          ║');
-    console.log('║ Option 1: Set DEEPSEEK_API_KEY env var   ║');
-    console.log('║ Option 2: Run --setup to encrypt & save  ║');
+    console.log('║ Option 1: Set AI_API_KEY env var         ║');
+    console.log('║ Option 2: Run jawere --setup             ║');
     console.log('║                                          ║');
-    console.log('║   npx tsx src/index.ts --setup            ║');
     console.log('╚══════════════════════════════════════════╝');
     process.exit(1);
   }

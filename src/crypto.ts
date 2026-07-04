@@ -64,6 +64,32 @@ export async function decrypt(encoded: string): Promise<string | null> {
 }
 
 const KEY_FILE = join(homedir(), '.jawere', 'key.enc');
+const CONFIG_FILE = join(homedir(), '.jawere', 'config.json');
+
+export interface SavedConfig {
+  provider: 'deepseek' | 'openai' | 'custom';
+  baseURL?: string;
+  model?: string;
+}
+
+/** Save provider/model config to ~/.jawere/config.json */
+export async function saveConfig(config: SavedConfig): Promise<void> {
+  const dir = join(homedir(), '.jawere');
+  await mkdir(dir, { recursive: true });
+  await writeFile(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
+  try { await chmod(CONFIG_FILE, 0o600); } catch { /* best effort */ }
+}
+
+/** Load provider/model config from ~/.jawere/config.json */
+export async function loadSavedConfig(): Promise<SavedConfig | null> {
+  try {
+    await access(CONFIG_FILE, constants.R_OK);
+    const raw = await readFile(CONFIG_FILE, 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
 
 /** Save encrypted API key to ~/.jawere/key.enc */
 export async function saveKey(apiKey: string): Promise<void> {

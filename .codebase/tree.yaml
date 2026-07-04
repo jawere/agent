@@ -17,11 +17,11 @@ tree:
     - package.json:
         type: config
         desc: "NPM package manifest — scripts, dependencies, metadata."
-        size: 1242
+        size: 862
     - README.md:
         type: docs
         desc: "Project documentation and README."
-        size: 3961
+        size: 3439
     - tsconfig.json:
         type: config
         desc: "TypeScript compiler configuration."
@@ -31,109 +31,28 @@ tree:
         type: other
         desc: "JavaScript module."
         size: 125
-  convex/:
-    - convex.json:
-        type: config
-        desc: "Convex project configuration."
-        size: 3
-    - package.json:
-        type: config
-        desc: "NPM package manifest — scripts, dependencies, metadata."
-        size: 1209
-    - README.md:
-        type: docs
-        desc: "Project documentation and README."
-        size: 4968
-    - tsconfig.json:
-        type: config
-        desc: "TypeScript compiler configuration."
-        size: 228
-  convex/bin/:
-    - ponytail.js:
-        type: other
-        desc: "JavaScript module."
-        size: 568
-  convex/convex/:
-    - chat.ts:
-        type: other
-        desc: "Exports: chatStream, chatSync."
-        size: 3468
-    - http.ts:
-        type: other
-        desc: "Exports: default."
-        size: 307
-    - schema.ts:
-        type: other
-        desc: "Database schema definition."
-        size: 1941
-    - seed.ts:
-        type: other
-        desc: "Database seeding script."
-        size: 3990
-    - sessions.ts:
-        type: other
-        desc: "Session management logic."
-        size: 4998
-    - tools.ts:
-        type: other
-        desc: "Tool definitions and implementations for agent actions."
-        size: 1582
-  convex/convex/_generated/:
-    - api.d.ts:
-        type: types
-        desc: "TypeScript source file."
-        size: 1192
-    - api.js:
-        type: backend
-        desc: "JavaScript module."
-        size: 480
-    - dataModel.d.ts:
-        type: types
-        desc: "Exports: TableNames, Doc, Id, DataModel."
-        size: 1736
-    - server.d.ts:
-        type: types
-        desc: "Exports: QueryCtx, MutationCtx, ActionCtx, DatabaseReader, DatabaseWriter."
-        size: 5600
-    - server.js:
-        type: backend
-        desc: "JavaScript module."
-        size: 3696
-  convex/scripts/:
-    - build.js:
-        type: other
-        desc: "Build/bundler script."
-        size: 803
-    - seed.ts:
-        type: other
-        desc: "Database seeding script."
-        size: 5275
   scripts/:
     - build.js:
         type: other
         desc: "Build/bundler script."
-        size: 872
+        size: 735
   src/:
     - agent.ts:
         type: other
         desc: "Agent loop — API calls, tool execution, spinner, retry logic."
-        size: 16921
+        size: 14772
     - config.ts:
         type: other
         desc: "Configuration loading and management."
-        size: 2212
-    - convex-client.ts:
-        type: other
-        desc: "Convex backend client for session persistence."
-        size: 4652
+        size: 1934
     - crypto.ts:
         type: other
         desc: "Encryption/decryption utilities."
-        size: 2781
+        size: 3924
     - index.ts:
         type: other
         desc: "Main entry point and REPL loop."
-        size: 10981
+        size: 9106
     - prompt.ts:
         type: other
         desc: "System prompt definition for the agent."
@@ -153,13 +72,13 @@ tree:
     - tools.ts:
         type: other
         desc: "Tool definitions and implementations for agent actions."
-        size: 41962
+        size: 48318
 
 # ── File summaries (for quick agent context) ────────────────────────
 
 summaries:
   "README.md":
-    lines: 102
+    lines: 94
     exports: []
     description: |
       Project documentation and README.
@@ -168,147 +87,41 @@ summaries:
     exports: []
     description: |
       JavaScript module.
-  "convex/README.md":
-    lines: 134
-    exports: []
-    description: |
-      Project documentation and README.
-  "convex/bin/ponytail.js":
-    lines: 16
-    exports: []
-    description: |
-      JavaScript module.
-  "convex/convex.json":
-    lines: 2
-    exports: []
-    description: |
-      Convex project configuration.
-  "convex/convex/_generated/api.d.ts":
-    lines: 58
-    exports: []
-    depends_on: ["../chat.js", "../http.js", "../seed.js", "../sessions.js", "../tools.js"]
-    description: |
-      TypeScript source file.
-  "convex/convex/_generated/api.js":
-    lines: 24
-    exports: ["api", "internal", "components"]
-    description: |
-      JavaScript module.
-  "convex/convex/_generated/dataModel.d.ts":
-    lines: 61
-    exports: ["TableNames", "Doc", "Id", "DataModel"]
-    depends_on: ["../schema.js"]
-    description: |
-      Exports: TableNames, Doc, Id, DataModel.
-  "convex/convex/_generated/server.d.ts":
-    lines: 144
-    exports: ["QueryCtx", "MutationCtx", "ActionCtx", "DatabaseReader", "DatabaseWriter"]
-    depends_on: ["./dataModel.js"]
-    description: |
-      Exports: QueryCtx, MutationCtx, ActionCtx, DatabaseReader, DatabaseWriter.
-  "convex/convex/_generated/server.js":
-    lines: 94
-    exports: ["query", "internalQuery", "mutation", "internalMutation", "action", "internalAction", "httpAction"]
-    description: |
-      JavaScript module.
-  "convex/convex/chat.ts":
-    lines: 135
-    exports: ["chatStream", "chatSync"]
-    depends_on: ["./_generated/server"]
-    description: |
-      Exports: chatStream, chatSync.
-  "convex/convex/http.ts":
-    lines: 19
-    exports: ["default"]
-    depends_on: ["./chat.js"]
-    description: |
-      Exports: default.
-  "convex/convex/schema.ts":
-    lines: 66
-    exports: ["default"]
-    description: |
-      Database schema definition.
-  "convex/convex/seed.ts":
-    lines: 114
-    exports: ["seedTools"]
-    depends_on: ["./_generated/server"]
-    description: |
-      Database seeding script.
-  "convex/convex/sessions.ts":
-    lines: 170
-    exports: ["list", "get", "getUsage", "create", "appendMessage", "remove"]
-    depends_on: ["./_generated/server", "./_generated/api"]
-    description: |
-      Session management logic.
-  "convex/convex/tools.ts":
-    lines: 66
-    exports: ["list", "getByName", "register", "remove"]
-    depends_on: ["./_generated/server"]
-    description: |
-      Tool definitions and implementations for agent actions.
-  "convex/package.json":
-    lines: 42
-    exports: []
-    description: |
-      NPM package manifest — scripts, dependencies, metadata.
-  "convex/scripts/build.js":
-    lines: 29
-    exports: []
-    description: |
-      Build/bundler script.
-  "convex/scripts/seed.ts":
-    lines: 143
-    exports: []
-    key_functions: ["main"]
-    depends_on: ["../convex/_generated/api.js"]
-    description: |
-      Database seeding script.
-  "convex/tsconfig.json":
-    lines: 13
-    exports: []
-    description: |
-      TypeScript compiler configuration.
   "package.json":
-    lines: 44
+    lines: 37
     exports: []
     description: |
       NPM package manifest — scripts, dependencies, metadata.
   "scripts/build.js":
-    lines: 29
+    lines: 26
     exports: []
     description: |
       Build/bundler script.
   "src/agent.ts":
-    lines: 517
+    lines: 447
     exports: ["AgentOptions", "AgentResult", "printAssistantResponse", "runAgent"]
-    key_functions: ["COL", "toolDetail", "displayToolLine", "safeCall", "withRetry", "stripThinking", "printAssistantResponse", "runAgent"]
-    depends_on: ["./system-prompt.js", "./tools.js", "./config.js", "./spinner.js", "./convex-client.js"]
+    key_functions: ["COL", "toolDetail", "displayToolLine", "withRetry", "stripThinking", "printAssistantResponse", "runAgent"]
+    depends_on: ["./system-prompt.js", "./tools.js", "./config.js", "./spinner.js"]
     description: |
       Agent loop — API calls, tool execution, spinner, retry logic.
   "src/config.ts":
-    lines: 81
+    lines: 74
     exports: ["Config", "loadConfig", "hasApiKey"]
     key_functions: ["isDevMode", "loadConfig", "hasApiKey"]
     depends_on: ["./crypto.js"]
     description: |
       Configuration loading and management.
-  "src/convex-client.ts":
-    lines: 165
-    exports: ["SessionInfo", "MessageContent", "createSession", "appendUserMessage", "appendAssistantMessage", "appendToolResult", "listSessions", "getSession"]
-    key_functions: ["convexMutation", "convexQuery", "createSession", "appendUserMessage", "appendAssistantMessage", "appendToolResult", "listSessions", "getSession"]
-    description: |
-      Convex backend client for session persistence.
   "src/crypto.ts":
-    lines: 85
+    lines: 109
     exports: ["encrypt", "decrypt", "saveKey", "loadKey", "hasKey", "deleteKey"]
-    key_functions: ["deriveKey", "encrypt", "decrypt", "saveKey", "loadKey", "hasKey", "deleteKey"]
+    key_functions: ["loadOrCreatePepper", "deriveKey", "encrypt", "decrypt", "saveKey", "loadKey", "hasKey", "deleteKey"]
     description: |
       Encryption/decryption utilities.
   "src/index.ts":
-    lines: 308
+    lines: 258
     exports: []
-    key_functions: ["center", "printBanner", "printHelp", "setupKey", "showSessions", "main"]
-    depends_on: ["./agent.js", "./config.js", "./crypto.js", "./convex-client.js", "./scanner.js", "./prompt.js"]
+    key_functions: ["center", "printBanner", "printHelp", "setupKey", "main"]
+    depends_on: ["./agent.js", "./config.js", "./crypto.js", "./scanner.js", "./prompt.js"]
     description: |
       Main entry point and REPL loop.
   "src/prompt.ts":
@@ -335,9 +148,9 @@ summaries:
     description: |
       System prompt definition for the agent.
   "src/tools.ts":
-    lines: 1250
+    lines: 1383
     exports: ["ToolCall", "ToolResult", "OpenAITool", "TOOL_DEFS", "executeTool"]
-    key_functions: ["truncateOutput", "execBash", "readFileTool", "diffSummary", "editFileTool", "writeFileTool", "lsTool", "findTool", "grepTool", "statTool", "diffTool", "httpsGetJSON", "webSearchTool", "resolveDocSites", "docsSearchTool", "executeTool"]
+    key_functions: ["safeResolve", "checkDangerousCommand", "truncateOutput", "execBash", "readFileTool", "diffSummary", "editFileTool", "writeFileTool", "lsTool", "findTool", "grepTool", "statTool", "diffTool", "httpsGetJSON", "webSearchTool", "resolveDocSites", "docsSearchTool", "executeTool"]
     description: |
       Tool definitions and implementations for agent actions.
   "tsconfig.json":
