@@ -1,0 +1,41 @@
+{
+  "name": "ponytail",
+  "version": "1.0.10",
+  "type": "module",
+  "bin": {
+    "ponytail": "./bin/ponytail.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "convex/_generated"
+  ],
+  "scripts": {
+    "start": "node --env-file .env.local --import tsx src/index.ts",
+    "start:prod": "tsx src/index.ts",
+    "build": "node scripts/build.js",
+    "dev": "npx convex dev",
+    "deploy:dev": "npx convex deploy --env-file .env.local",
+    "deploy:prod": "npx convex deploy --env-file .env.prod",
+    "seed:dev": "CONVEX_URL=https://dazzling-jackal-33.convex.cloud tsx scripts/seed.ts",
+    "seed:prod": "CONVEX_URL=https://friendly-pigeon-624.convex.cloud tsx scripts/seed.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "convex": "^1.42.1",
+    "get-east-asian-width": "^1.6.0",
+    "ponytail": "^1.2.1",
+    "marked": "^18.0.5",
+    "tsx": "^4.22.1"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org"
+  },
+  "devDependencies": {
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/github": "^12.0.9",
+    "@semantic-release/npm": "^13.1.5",
+    "@semantic-release/release-notes-generator": "^14.1.1",
+    "semantic-release": "^25.0.5"
+  }
+}

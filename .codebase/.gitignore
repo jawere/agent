@@ -1,0 +1,4 @@
+# .codebase — scanner cache directory
+# tree.yaml is committed (serves as documentation)
+# meta.json is generated per-machine, don't commit
+meta.json

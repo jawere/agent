@@ -1,0 +1,25 @@
+import * as esbuild from 'esbuild';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const root = resolve(__dirname, '..');
+
+// Build the CLI bundle
+await esbuild.build({
+  entryPoints: [resolve(root, 'src/index.ts')],
+  bundle: true,
+  platform: 'node',
+  target: 'node18',
+  format: 'esm',
+  outfile: resolve(root, 'dist/index.js'),
+  external: ['tsx', 'esbuild'], // never bundle these
+  sourcemap: false,
+  minify: false,
+});
+
+// Copy convex backend into dist (needed at runtime for convex deploy)
+// The convex/ directory is already at the root, no copy needed.
+
+console.log('Build complete.');
