@@ -14,7 +14,7 @@ await esbuild.build({
   target: 'node18',
   format: 'esm',
   outfile: resolve(root, 'dist/index.js'),
-  external: ['tsx', 'esbuild'], // never bundle these
+  external: ['tsx', 'esbuild', 'better-sqlite3'], // never bundle these
   sourcemap: false,
   minify: false,
   banner: {

@@ -17,7 +17,7 @@ tree:
     - package.json:
         type: config
         desc: "NPM package manifest — scripts, dependencies, metadata."
-        size: 862
+        size: 936
     - README.md:
         type: docs
         desc: "Project documentation and README."
@@ -40,7 +40,7 @@ tree:
     - agent.ts:
         type: other
         desc: "Agent loop — API calls, tool execution, spinner, retry logic."
-        size: 14778
+        size: 16540
     - config.ts:
         type: other
         desc: "Configuration loading and management."
@@ -49,10 +49,14 @@ tree:
         type: other
         desc: "Encryption/decryption utilities."
         size: 4771
+    - db.ts:
+        type: other
+        desc: "Exports: SessionRow, MessageRow, initDb, closeDb, createSession, …."
+        size: 6587
     - index.ts:
         type: other
         desc: "Main entry point and REPL loop."
-        size: 10964
+        size: 13516
     - prompt.ts:
         type: other
         desc: "System prompt definition for the agent."
@@ -64,15 +68,15 @@ tree:
     - spinner.ts:
         type: other
         desc: "Exports: Spinner, createSpinner."
-        size: 5897
+        size: 5936
     - system-prompt.ts:
         type: other
         desc: "System prompt definition for the agent."
-        size: 7655
+        size: 9067
     - tools.ts:
         type: other
         desc: "Tool definitions and implementations for agent actions."
-        size: 48318
+        size: 48074
 
 # ── File summaries (for quick agent context) ────────────────────────
 
@@ -88,7 +92,7 @@ summaries:
     description: |
       JavaScript module.
   "package.json":
-    lines: 37
+    lines: 39
     exports: []
     description: |
       NPM package manifest — scripts, dependencies, metadata.
@@ -98,7 +102,7 @@ summaries:
     description: |
       Build/bundler script.
   "src/agent.ts":
-    lines: 447
+    lines: 488
     exports: ["AgentOptions", "AgentResult", "printAssistantResponse", "runAgent"]
     key_functions: ["COL", "toolDetail", "displayToolLine", "withRetry", "stripThinking", "printAssistantResponse", "runAgent"]
     depends_on: ["./system-prompt.js", "./tools.js", "./config.js", "./spinner.js"]
@@ -117,11 +121,17 @@ summaries:
     key_functions: ["loadOrCreatePepper", "deriveKey", "encrypt", "decrypt", "saveConfig", "loadSavedConfig", "saveKey", "loadKey", "hasKey", "deleteKey"]
     description: |
       Encryption/decryption utilities.
+  "src/db.ts":
+    lines: 209
+    exports: ["SessionRow", "MessageRow", "initDb", "closeDb", "createSession", "listSessions", "getSessionMessages", "deleteSession", "persistMessages", "replaceSessionMessages"]
+    key_functions: ["getDbPath", "initDb", "closeDb", "createSession", "listSessions", "getSessionMessages", "deleteSession", "persistMessages", "replaceSessionMessages"]
+    description: |
+      Exports: SessionRow, MessageRow, initDb, closeDb, createSession, ….
   "src/index.ts":
-    lines: 308
+    lines: 378
     exports: []
-    key_functions: ["center", "printBanner", "printHelp", "setupKey", "main"]
-    depends_on: ["./agent.js", "./config.js", "./crypto.js", "./scanner.js", "./prompt.js"]
+    key_functions: ["center", "printBanner", "printHelp", "formatTime", "setupKey", "main"]
+    depends_on: ["./agent.js", "./config.js", "./crypto.js", "./db.js", "./scanner.js", "./prompt.js"]
     description: |
       Main entry point and REPL loop.
   "src/prompt.ts":
@@ -137,18 +147,18 @@ summaries:
     description: |
       Background codebase scanner — generates tree.yaml cache.
   "src/spinner.ts":
-    lines: 157
+    lines: 158
     exports: ["Spinner", "createSpinner"]
     key_functions: ["createSpinner"]
     description: |
       Exports: Spinner, createSpinner.
   "src/system-prompt.ts":
-    lines: 148
+    lines: 166
     exports: ["SYSTEM_PROMPT"]
     description: |
       System prompt definition for the agent.
   "src/tools.ts":
-    lines: 1383
+    lines: 1379
     exports: ["ToolCall", "ToolResult", "OpenAITool", "TOOL_DEFS", "executeTool"]
     key_functions: ["safeResolve", "checkDangerousCommand", "truncateOutput", "execBash", "readFileTool", "diffSummary", "editFileTool", "writeFileTool", "lsTool", "findTool", "grepTool", "statTool", "diffTool", "httpsGetJSON", "webSearchTool", "resolveDocSites", "docsSearchTool", "executeTool"]
     description: |
