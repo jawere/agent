@@ -2,16 +2,19 @@
 // Runs before the user prompt becomes available.
 // Generates .codebase/tree.yaml (annotated project tree + file summaries)
 // and .codebase/meta.json (scan metadata for cache invalidation).
+// Also generates .codebase/checksums.json for content-hash change detection.
 
 import { existsSync, statSync, readFileSync } from 'fs';
 import { readFile, writeFile, mkdir, readdir } from 'fs/promises';
 import { resolve, relative, join, basename, dirname } from 'path';
 import { execSync } from 'child_process';
+import { createHash } from 'crypto';
 
 const SCAN_INTERVAL_MS = 5 * 60 * 1000; // 5 min cache validity
 const CODEBASE_DIR = '.codebase';
 const TREE_FILE = '.codebase/tree.yaml';
 const META_FILE = '.codebase/meta.json';
+const CHECKSUMS_FILE = '.codebase/checksums.json';
 
 // Files/dirs to skip entirely
 const SKIP_DIRS = new Set([
@@ -37,6 +40,18 @@ interface ScanMeta {
   gitHash: string | null;
   workDir: string;
   scanner: string;
+}
+
+interface ChecksumEntry {
+  hash: string;
+  size: number;
+  scannedAt: number;
+}
+
+interface Checksums {
+  scannedAt: number;
+  gitHash: string | null;
+  files: Record<string, ChecksumEntry>;
 }
 
 interface FileEntry {
@@ -66,6 +81,17 @@ interface TreeYAML {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
+
+/** Compute SHA-256 hash of a file's contents (first 64KB for speed). */
+function hashFile(filepath: string): string | null {
+  try {
+    const fd = readFileSync(filepath);
+    const sample = fd.length > 65536 ? fd.subarray(0, 65536) : fd;
+    return createHash('sha256').update(sample).digest('hex').slice(0, 16);
+  } catch {
+    return null;
+  }
+}
 
 async function getGitHash(workDir: string): Promise<string | null> {
   try {
@@ -279,6 +305,20 @@ export async function cacheIsStale(workDir: string): Promise<boolean> {
   return false;
 }
 
+/**
+ * Load stored checksums for quick file-change detection.
+ * The agent can use this to skip re-reading files that haven't changed.
+ */
+export async function loadChecksums(workDir: string): Promise<Checksums | null> {
+  const path = resolve(workDir, CHECKSUMS_FILE);
+  try {
+    if (!existsSync(path)) return null;
+    return JSON.parse(await readFile(path, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
 // ── Scanner ──────────────────────────────────────────────────────────
 
 async function getAllFiles(dir: string, baseDir: string): Promise<string[]> {
@@ -379,12 +419,30 @@ async function scanCodebase(workDir: string): Promise<{ fileCount: number }> {
   // 4. Get project info
   const { name, version } = getProjectInfo(workDir);
 
-  // 5. Generate tree.yaml
+  // 5. Generate checksums (content-hash tracking for change detection)
+  const gitHash = await getGitHash(workDir);
+  const checksums: Checksums = {
+    scannedAt: Date.now(),
+    gitHash,
+    files: {},
+  };
+  for (const file of files) {
+    const fullPath = resolve(workDir, file);
+    const hash = hashFile(fullPath);
+    if (hash) {
+      try {
+        const st = statSync(fullPath);
+        checksums.files[file] = { hash, size: st.size, scannedAt: Date.now() };
+      } catch { /* skip unreadable files */ }
+    }
+  }
+  await writeFile(resolve(workDir, CHECKSUMS_FILE), JSON.stringify(checksums, null, 2) + '\n', 'utf-8');
+
+  // 6. Generate tree.yaml
   const treeYaml = generateTreeYaml(name, version, tree, summaries);
   await writeFile(resolve(workDir, TREE_FILE), treeYaml, 'utf-8');
 
-  // 6. Generate meta.json
-  const gitHash = await getGitHash(workDir);
+  // 7. Generate meta.json
   const meta: ScanMeta = {
     scannedAt: Date.now(),
     fileCount: files.length,

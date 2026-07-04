@@ -11,20 +11,23 @@ project:
 
 tree:
   root:
+    - LICENSE:
+        type: other
+        size: 1063
     - package.json:
         type: config
         desc: "NPM package manifest — scripts, dependencies, metadata."
-        size: 1021
+        size: 1205
     - README.md:
         type: docs
         desc: "Project documentation and README."
-        size: 12873
+        size: 3946
     - tsconfig.json:
         type: config
         desc: "TypeScript compiler configuration."
         size: 375
   bin/:
-    - ponytail.js:
+    - jawere.js:
         type: other
         desc: "JavaScript module."
         size: 125
@@ -40,7 +43,7 @@ tree:
     - README.md:
         type: docs
         desc: "Project documentation and README."
-        size: 4933
+        size: 4927
     - tsconfig.json:
         type: config
         desc: "TypeScript compiler configuration."
@@ -114,7 +117,7 @@ tree:
     - agent.ts:
         type: other
         desc: "Agent loop — API calls, tool execution, spinner, retry logic."
-        size: 14824
+        size: 14464
     - config.ts:
         type: other
         desc: "Configuration loading and management."
@@ -126,15 +129,19 @@ tree:
     - crypto.ts:
         type: other
         desc: "Encryption/decryption utilities."
-        size: 2793
+        size: 2781
     - index.ts:
         type: other
         desc: "Main entry point and REPL loop."
-        size: 17250
+        size: 10975
+    - prompt.ts:
+        type: other
+        desc: "System prompt definition for the agent."
+        size: 8002
     - scanner.ts:
         type: other
         desc: "Background codebase scanner — generates tree.yaml cache."
-        size: 17080
+        size: 18785
     - spinner.ts:
         type: other
         desc: "Exports: Spinner, createSpinner."
@@ -142,7 +149,7 @@ tree:
     - system-prompt.ts:
         type: other
         desc: "System prompt definition for the agent."
-        size: 3707
+        size: 5577
     - tools.ts:
         type: other
         desc: "Tool definitions and implementations for agent actions."
@@ -152,11 +159,11 @@ tree:
 
 summaries:
   "README.md":
-    lines: 268
+    lines: 102
     exports: []
     description: |
       Project documentation and README.
-  "bin/ponytail.js":
+  "bin/jawere.js":
     lines: 6
     exports: []
     description: |
@@ -262,7 +269,7 @@ summaries:
     description: |
       TypeScript compiler configuration.
   "package.json":
-    lines: 39
+    lines: 43
     exports: []
     description: |
       NPM package manifest — scripts, dependencies, metadata.
@@ -272,7 +279,7 @@ summaries:
     description: |
       Build/bundler script.
   "src/agent.ts":
-    lines: 462
+    lines: 453
     exports: ["AgentOptions", "AgentResult", "printAssistantResponse", "runAgent"]
     key_functions: ["COL", "toolDetail", "displayToolLine", "safeCall", "withRetry", "stripThinking", "printAssistantResponse", "runAgent"]
     depends_on: ["./system-prompt.js", "./tools.js", "./config.js", "./spinner.js", "./convex-client.js"]
@@ -298,16 +305,22 @@ summaries:
     description: |
       Encryption/decryption utilities.
   "src/index.ts":
-    lines: 497
+    lines: 308
     exports: []
     key_functions: ["center", "printBanner", "printHelp", "setupKey", "showSessions", "main"]
-    depends_on: ["./agent.js", "./config.js", "./crypto.js", "./convex-client.js", "./scanner.js"]
+    depends_on: ["./agent.js", "./config.js", "./crypto.js", "./convex-client.js", "./scanner.js", "./prompt.js"]
     description: |
       Main entry point and REPL loop.
+  "src/prompt.ts":
+    lines: 263
+    exports: ["createPrompt"]
+    key_functions: ["simplePrompt", "multilinePrompt", "createPrompt"]
+    description: |
+      System prompt definition for the agent.
   "src/scanner.ts":
-    lines: 518
-    exports: ["cacheIsStale", "runScanner"]
-    key_functions: ["getGitHash", "isBinary", "classifyFile", "extractExports", "extractImports", "extractKeyFunctions", "generateDescription", "summarizeFile", "cacheIsStale", "getAllFiles", "buildTree", "getProjectInfo", "scanCodebase", "generateTreeYaml", "escapeYaml", "formatSize", "runScanner"]
+    lines: 576
+    exports: ["cacheIsStale", "loadChecksums", "runScanner"]
+    key_functions: ["hashFile", "getGitHash", "isBinary", "classifyFile", "extractExports", "extractImports", "extractKeyFunctions", "generateDescription", "summarizeFile", "cacheIsStale", "loadChecksums", "getAllFiles", "buildTree", "getProjectInfo", "scanCodebase", "generateTreeYaml", "escapeYaml", "formatSize", "runScanner"]
     description: |
       Background codebase scanner — generates tree.yaml cache.
   "src/spinner.ts":
@@ -317,7 +330,7 @@ summaries:
     description: |
       Exports: Spinner, createSpinner.
   "src/system-prompt.ts":
-    lines: 74
+    lines: 116
     exports: ["SYSTEM_PROMPT"]
     description: |
       System prompt definition for the agent.
