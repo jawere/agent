@@ -5,6 +5,7 @@ import type { ChatCompletionMessageParam } from 'openai/resources/chat/completio
 import { runAgent } from './agent.js';
 import { loadConfig, hasApiKey } from './config.js';
 import { saveKey, loadKey, deleteKey, hasKey, saveConfig, type SavedConfig } from './crypto.js';
+import { initDb, closeDb, createSession, listSessions, getSessionMessages, deleteSession, persistMessages } from './db.js';
 
 import { runScanner } from './scanner.js';
 import { createPrompt } from './prompt.js';
@@ -37,7 +38,8 @@ function printHelp() {
   console.log(`
 ${G_GREEN}Commands:${R}
   ${G_GRAY}/help${R}          Show this help
-
+  ${G_GRAY}/sessions${R}      List past sessions
+  ${G_GRAY}/resume <id>${R}   Resume a past session
   ${G_GRAY}/key${R}           Show API key status
   ${G_GRAY}/setup${R}         Re-configure AI provider & key
   ${G_GRAY}/clear${R}         Clear screen & start fresh session
@@ -46,6 +48,19 @@ ${G_GREEN}Commands:${R}
 ${G_GREEN}CLI flags:${R}
   ${G_GRAY}--setup${R}        Run setup wizard (provider, key, model)
 `);
+}
+
+function formatTime(iso: string): string {
+  const d = new Date(iso + 'Z');
+  const now = new Date();
+  const diff = now.getTime() - d.getTime();
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${days}d ago`;
 }
 
 async function setupKey(): Promise<void> {
@@ -166,6 +181,14 @@ async function main(): Promise<void> {
     process.stderr.write(` ${G_GRAY}[skipped: ${msg}]${R}\n`);
   }
 
+  // ── Initialize SQLite session store ──────────────────────────
+  try {
+    initDb(config.workDir);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`${G_GRAY}[db init failed: ${msg}]${R}\n`);
+  }
+
   let currentSessionId: string | undefined;
   let conversationHistory: ChatCompletionMessageParam[] = [];
   let sessionShown = false;
@@ -217,6 +240,11 @@ async function main(): Promise<void> {
   };
   process.on('SIGINT', sigintHandler);
 
+  // Clean up DB on any exit
+  const exitHandler = () => { closeDb(); };
+  process.on('exit', exitHandler);
+  process.on('SIGHUP', exitHandler);
+
   while (true) {
     const input = await prompt();
 
@@ -253,10 +281,41 @@ async function main(): Promise<void> {
           currentSessionId = undefined;
           sessionShown = false;
           break;
+        case 'sessions': {
+          const sessions = listSessions(20);
+          if (sessions.length === 0) {
+            console.log(`${G_GRAY}No past sessions.${R}`);
+          } else {
+            console.log(`\n${G_GREEN}Past sessions:${R}`);
+            for (const s of sessions) {
+              const time = formatTime(s.created_at);
+              console.log(`  ${G_AQUA}${s.id.slice(0, 16)}…${R}  ${G_GRAY}${s.message_count} msgs${R}  ${G_GRAY}${time}${R}`);
+            }
+            console.log(`${G_GRAY}Use /resume <id> to restore a session.${R}`);
+          }
+          break;
+        }
+        case 'resume': {
+          if (!arg) {
+            console.log(`${G_GRAY}Usage: /resume <session-id>${R}`);
+            break;
+          }
+          const msgs = getSessionMessages(arg);
+          if (msgs.length === 0) {
+            console.log(`${G_GRAY}Session not found or empty: ${arg}${R}`);
+          } else {
+            currentSessionId = arg;
+            conversationHistory = msgs;
+            sessionShown = true;
+            console.log(`${G_GREEN}Resumed session ${arg.slice(0, 16)}…${R} ${G_GRAY}(${msgs.length} messages)${R}`);
+          }
+          break;
+        }
         case 'exit':
         case 'quit':
           console.log('Goodbye!');
           disableBracketedPaste();
+          closeDb();
           process.exit(0);
         default:
           console.log(`Unknown command: /${cmd}. Type /help for commands.`);
@@ -284,15 +343,26 @@ async function main(): Promise<void> {
       // The final summary is already printed by runAgent internally.
       // We just track session state here.
 
-      // Track session (show banner on first turn)
-      if (!currentSessionId || currentSessionId === 'local') {
-        currentSessionId = result.sessionId;
-        if (currentSessionId !== 'local' && !sessionShown) {
-          console.log(`\n${G_GRAY}[session: ${currentSessionId.slice(0, 12)}…]${R}`);
-          sessionShown = true;
+      // Track session — create a real session ID on first turn
+      if (!currentSessionId) {
+        try {
+          currentSessionId = createSession();
+        } catch {
+          currentSessionId = 'local';
         }
+        sessionShown = true;
+        console.log(`\n${G_GRAY}[session: ${currentSessionId.slice(0, 16)}…]${R}`);
       }
       conversationHistory = result.history;
+
+      // Persist messages to SQLite
+      if (currentSessionId !== 'local') {
+        try {
+          persistMessages(currentSessionId, result.history);
+        } catch {
+          // persistence is best-effort
+        }
+      }
     } catch (err: unknown) {
       runningAbort = null;
       const msg = err instanceof Error ? err.message : String(err);

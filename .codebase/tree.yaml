@@ -40,19 +40,19 @@ tree:
     - agent.ts:
         type: other
         desc: "Agent loop — API calls, tool execution, spinner, retry logic."
-        size: 14772
+        size: 14778
     - config.ts:
         type: other
         desc: "Configuration loading and management."
-        size: 1934
+        size: 3239
     - crypto.ts:
         type: other
         desc: "Encryption/decryption utilities."
-        size: 3924
+        size: 4771
     - index.ts:
         type: other
         desc: "Main entry point and REPL loop."
-        size: 9106
+        size: 10964
     - prompt.ts:
         type: other
         desc: "System prompt definition for the agent."
@@ -105,20 +105,20 @@ summaries:
     description: |
       Agent loop — API calls, tool execution, spinner, retry logic.
   "src/config.ts":
-    lines: 74
+    lines: 112
     exports: ["Config", "loadConfig", "hasApiKey"]
     key_functions: ["isDevMode", "loadConfig", "hasApiKey"]
     depends_on: ["./crypto.js"]
     description: |
       Configuration loading and management.
   "src/crypto.ts":
-    lines: 109
-    exports: ["encrypt", "decrypt", "saveKey", "loadKey", "hasKey", "deleteKey"]
-    key_functions: ["loadOrCreatePepper", "deriveKey", "encrypt", "decrypt", "saveKey", "loadKey", "hasKey", "deleteKey"]
+    lines: 135
+    exports: ["encrypt", "decrypt", "SavedConfig", "saveConfig", "loadSavedConfig", "saveKey", "loadKey", "hasKey", "deleteKey"]
+    key_functions: ["loadOrCreatePepper", "deriveKey", "encrypt", "decrypt", "saveConfig", "loadSavedConfig", "saveKey", "loadKey", "hasKey", "deleteKey"]
     description: |
       Encryption/decryption utilities.
   "src/index.ts":
-    lines: 258
+    lines: 308
     exports: []
     key_functions: ["center", "printBanner", "printHelp", "setupKey", "main"]
     depends_on: ["./agent.js", "./config.js", "./crypto.js", "./scanner.js", "./prompt.js"]

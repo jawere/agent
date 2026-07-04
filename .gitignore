@@ -6,3 +6,4 @@ dist/
 .env.production
 .env.development
 .npmrc
+.codebase/
