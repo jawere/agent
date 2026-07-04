@@ -5,7 +5,7 @@
 
 project:
   name: jawere
-  version: 1.0.12
+  version: 1.4.0
   language: typescript
   type: terminal-ai-coding-agent
 
@@ -17,7 +17,7 @@ tree:
     - package.json:
         type: config
         desc: "NPM package manifest — scripts, dependencies, metadata."
-        size: 1205
+        size: 1242
     - README.md:
         type: docs
         desc: "Project documentation and README."
@@ -112,12 +112,12 @@ tree:
     - build.js:
         type: other
         desc: "Build/bundler script."
-        size: 751
+        size: 872
   src/:
     - agent.ts:
         type: other
         desc: "Agent loop — API calls, tool execution, spinner, retry logic."
-        size: 14464
+        size: 16596
     - config.ts:
         type: other
         desc: "Configuration loading and management."
@@ -149,11 +149,11 @@ tree:
     - system-prompt.ts:
         type: other
         desc: "System prompt definition for the agent."
-        size: 5577
+        size: 6876
     - tools.ts:
         type: other
         desc: "Tool definitions and implementations for agent actions."
-        size: 19625
+        size: 26218
 
 # ── File summaries (for quick agent context) ────────────────────────
 
@@ -269,17 +269,17 @@ summaries:
     description: |
       TypeScript compiler configuration.
   "package.json":
-    lines: 43
+    lines: 44
     exports: []
     description: |
       NPM package manifest — scripts, dependencies, metadata.
   "scripts/build.js":
-    lines: 26
+    lines: 29
     exports: []
     description: |
       Build/bundler script.
   "src/agent.ts":
-    lines: 453
+    lines: 507
     exports: ["AgentOptions", "AgentResult", "printAssistantResponse", "runAgent"]
     key_functions: ["COL", "toolDetail", "displayToolLine", "safeCall", "withRetry", "stripThinking", "printAssistantResponse", "runAgent"]
     depends_on: ["./system-prompt.js", "./tools.js", "./config.js", "./spinner.js", "./convex-client.js"]
@@ -330,14 +330,14 @@ summaries:
     description: |
       Exports: Spinner, createSpinner.
   "src/system-prompt.ts":
-    lines: 116
+    lines: 137
     exports: ["SYSTEM_PROMPT"]
     description: |
       System prompt definition for the agent.
   "src/tools.ts":
-    lines: 653
+    lines: 828
     exports: ["ToolCall", "ToolResult", "OpenAITool", "TOOL_DEFS", "executeTool"]
-    key_functions: ["truncateOutput", "execBash", "readFileTool", "editFileTool", "writeFileTool", "lsTool", "findTool", "grepTool", "executeTool"]
+    key_functions: ["truncateOutput", "execBash", "readFileTool", "diffSummary", "editFileTool", "writeFileTool", "lsTool", "findTool", "grepTool", "statTool", "diffTool", "executeTool"]
     description: |
       Tool definitions and implementations for agent actions.
   "tsconfig.json":

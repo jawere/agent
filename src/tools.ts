@@ -208,6 +208,32 @@ export const TOOL_DEFS: OpenAITool[] = [
   {
     type: 'function',
     function: {
+      name: 'diff',
+      description:
+        'Show a git diff of changes. Useful for reviewing what changed before committing. ' +
+        'Supports --staged for staged changes, and optional path/file and base ref.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: 'Specific file or directory to diff (optional — diffs everything if omitted)',
+          },
+          staged: {
+            type: 'boolean',
+            description: 'Show staged changes (git diff --staged). Default: false (working tree)',
+          },
+          base: {
+            type: 'string',
+            description: 'Base ref to diff against (e.g. HEAD~1, main). Default: HEAD for staged, working tree otherwise',
+          },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'grep',
       description:
         'Search file contents with regex. Returns matching file paths with line numbers and content. ' +
@@ -701,6 +727,23 @@ async function statTool(path: string, workDir: string): Promise<string> {
   }
 }
 
+// ── Diff tool ───────────────────────────────────────────────────────
+
+async function diffTool(
+  path: string | undefined,
+  staged: boolean | undefined,
+  base: string | undefined,
+  workDir: string,
+): Promise<string> {
+  const args: string[] = ['diff'];
+  if (staged) args.push('--staged');
+  if (base) args.push(base);
+  if (path) args.push('--', path);
+  else args.push('--', '.');
+
+  return execBash(`git ${args.join(' ')}`, workDir, 30);
+}
+
 // ── Tool dispatcher ─────────────────────────────────────────────────
 
 export async function executeTool(
@@ -749,6 +792,14 @@ export async function executeTool(
         break;
       case 'find':
         result = await findTool(args.pattern as string, args.path as string | undefined, workDir);
+        break;
+      case 'diff':
+        result = await diffTool(
+          args.path as string | undefined,
+          args.staged as boolean | undefined,
+          args.base as string | undefined,
+          workDir,
+        );
         break;
       case 'grep':
         result = await grepTool(

@@ -396,30 +396,46 @@ function getProjectInfo(workDir: string): { name: string; version: string } {
   return { name, version };
 }
 
-async function scanCodebase(workDir: string): Promise<{ fileCount: number }> {
+async function scanCodebase(
+  workDir: string,
+  onProgress?: (phase: string, detail?: string) => void,
+): Promise<{ fileCount: number }> {
   const codebaseDir = resolve(workDir, CODEBASE_DIR);
   await mkdir(codebaseDir, { recursive: true });
 
   // 1. Get all files
+  onProgress?.('listing files');
   const allFiles = await getAllFiles(workDir, workDir);
   const files = allFiles.sort();
+  onProgress?.(`found ${files.length} files`);
 
   // 2. Build tree
+  onProgress?.('building tree');
   const tree = buildTree(files);
 
   // 3. Summarize source files
+  onProgress?.(`summarizing ${files.length} files`);
   const summaries: Record<string, FileSummary> = {};
-  for (const file of files) {
-    const summary = await summarizeFile(resolve(workDir, file));
+  let lastReport = 0;
+  for (let i = 0; i < files.length; i++) {
+    const summary = await summarizeFile(resolve(workDir, files[i]));
     if (summary) {
-      summaries[file] = summary;
+      summaries[files[i]] = summary;
+    }
+    // Report progress every 10 files or every 200ms
+    const now = Date.now();
+    if (i - lastReport >= 10 || now - lastReport > 200) {
+      onProgress?.(`summarizing ${i + 1}/${files.length}`);
+      lastReport = i;
     }
   }
 
   // 4. Get project info
+  onProgress?.('reading project info');
   const { name, version } = getProjectInfo(workDir);
 
   // 5. Generate checksums (content-hash tracking for change detection)
+  onProgress?.('hashing files');
   const gitHash = await getGitHash(workDir);
   const checksums: Checksums = {
     scannedAt: Date.now(),
@@ -436,13 +452,16 @@ async function scanCodebase(workDir: string): Promise<{ fileCount: number }> {
       } catch { /* skip unreadable files */ }
     }
   }
+  onProgress?.('writing checksums');
   await writeFile(resolve(workDir, CHECKSUMS_FILE), JSON.stringify(checksums, null, 2) + '\n', 'utf-8');
 
   // 6. Generate tree.yaml
+  onProgress?.('writing tree.yaml');
   const treeYaml = generateTreeYaml(name, version, tree, summaries);
   await writeFile(resolve(workDir, TREE_FILE), treeYaml, 'utf-8');
 
   // 7. Generate meta.json
+  onProgress?.('writing meta.json');
   const meta: ScanMeta = {
     scannedAt: Date.now(),
     fileCount: files.length,
@@ -564,12 +583,23 @@ export async function runScanner(
       const meta: ScanMeta = JSON.parse(
         await readFile(resolve(workDir, META_FILE), 'utf-8'),
       );
+      process.stderr.write(` (cached)`);
       return { fileCount: meta.fileCount, cached: true };
     } catch {
       // Meta corrupt, fall through to scan
     }
   }
 
-  const { fileCount } = await scanCodebase(workDir);
+  // Show progress as the scanner works through phases
+  const GRAY = '\x1b[38;2;146;131;116m';
+  const RESET = '\x1b[0m';
+
+  const { fileCount } = await scanCodebase(workDir, (phase, detail) => {
+    // Clear previous progress line, show new one
+    const msg = detail || phase;
+    process.stderr.write(`\r\x1b[K${GRAY}  scanning: ${msg}${RESET}`);
+  });
+  // Clear the last progress line
+  process.stderr.write(`\r\x1b[K`);
   return { fileCount, cached: false };
 }

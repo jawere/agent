@@ -12,7 +12,7 @@ import {
 } from './convex-client.js';
 
 const MAX_TURNS = 500;
-const MAX_OUTPUT_TOKENS = 300_000; // 300k max output tokens
+const MAX_OUTPUT_TOKENS = 393_216; // 384K max output tokens (DeepSeek limit)
 
 // ── Terminal display helpers ────────────────────────────────────────
 
@@ -29,6 +29,9 @@ const RESET = '\x1b[0m';
 
 /** File-oriented tools get green; bash/grep/find get grey */
 const FILE_TOOLS = new Set(['read', 'write', 'edit', 'stat']);
+
+/** Tools whose execution lines are never shown to the user (silent) */
+const SILENT_TOOLS = new Set(['diff']);
 
 /** Build a compact tool detail string from args */
 function toolDetail(name: string, args: Record<string, unknown>): string {
@@ -63,6 +66,9 @@ function displayToolLine(
   ok: boolean,
   spin: Spinner | null,
 ): void {
+  // Silent tools — never show execution line
+  if (SILENT_TOOLS.has(name)) return;
+
   // Stop spinner temporarily to print the tool line cleanly
   if (spin?.running) {
     spin.stop();
@@ -301,60 +307,98 @@ export async function runAgent(
     // Update spinner message before API call
     spin.update('Thinking…');
 
-    const response = await withRetry(() => {
-      return client.chat.completions.create({
-        model: config.model,
-        messages,
-        tools: TOOL_DEFS,
-        tool_choice: 'auto',
-        temperature: 0.2,
-        max_tokens: MAX_OUTPUT_TOKENS,
-        // Enable thinking/reasoning — DeepSeek specific params
-        ...(({
-          thinking: { type: 'enabled' },
-          reasoning_effort: 'max',
-        } as any)),
-      });
-    }).catch((err) => {
+    // ── Streaming API call — accumulate silently, only show final response ──
+    let streamedContent = '';
+    const streamedToolCalls: Map<number, { id: string; name: string; arguments: string }> = new Map();
+    let streamUsage: { input: number; output: number; total: number } | undefined;
+
+    try {
+      const stream: AsyncIterable<any> = await withRetry(async () => {
+        return client.chat.completions.create({
+          model: config.model,
+          messages,
+          tools: TOOL_DEFS,
+          tool_choice: 'auto',
+          temperature: 0.2,
+          max_tokens: MAX_OUTPUT_TOKENS,
+          stream: true,
+          stream_options: { include_usage: true },
+          // Enable thinking/reasoning — DeepSeek specific params
+          ...(({
+            thinking: { type: 'enabled' },
+            reasoning_effort: 'max',
+          } as any)),
+        }) as unknown as AsyncIterable<any>;
+      }) as AsyncIterable<any>;
+
+      for await (const chunk of stream) {
+        // Check cancellation mid-stream
+        if (options.signal?.aborted) break;
+
+        const delta = (chunk as any).choices?.[0]?.delta;
+        if (!delta) {
+          // Usage chunk (final chunk with stream_options.include_usage)
+          if ((chunk as any).usage) {
+            streamUsage = {
+              input: (chunk as any).usage.prompt_tokens || 0,
+              output: (chunk as any).usage.completion_tokens || 0,
+              total: (chunk as any).usage.total_tokens || 0,
+            };
+          }
+          continue;
+        }
+
+        // Accumulate text content (silently — not shown to user)
+        if (delta.content) {
+          streamedContent += delta.content;
+        }
+
+        // Accumulate tool calls (they come in fragments across chunks)
+        if (delta.tool_calls) {
+          for (const tc of delta.tool_calls) {
+            const idx = tc.index ?? 0;
+            if (!streamedToolCalls.has(idx)) {
+              streamedToolCalls.set(idx, { id: '', name: '', arguments: '' });
+            }
+            const entry = streamedToolCalls.get(idx)!;
+            if (tc.id) entry.id = tc.id;
+            if (tc.function?.name) entry.name += tc.function.name;
+            if (tc.function?.arguments) entry.arguments += tc.function.arguments;
+          }
+        }
+
+        // Update spinner occasionally (not on every chunk to avoid flicker)
+        spin.update('Thinking…');
+      }
+    } catch (err: any) {
       if (err.name === 'AbortError' || err.name === 'Canceled') {
-        return null as any;
+        spin.stop();
+        const msg = '\n[Cancelled by user]';
+        return { text: msg, sessionId, history: messages };
       }
       throw err;
-    });
+    }
 
-    // Cancelled mid-request
-    if (!response) {
+    // Cancelled mid-stream
+    if (options.signal?.aborted) {
       spin.stop();
       const msg = '\n[Cancelled by user]';
       return { text: msg, sessionId, history: messages };
     }
 
-    const choice = response.choices[0];
-    if (!choice) {
-      spin.stop();
-      safeCall(
-        () => appendAssistantMessage(config.convexUrl, sessionId, '(error: no response)', null),
-        'appendAssistantMessage',
-      );
-      return { text: 'Error: No response from model.', sessionId, history: messages };
-    }
-
-    const { message } = choice;
-
-    const usage = response.usage
-      ? {
-          input: response.usage.prompt_tokens || 0,
-          output: response.usage.completion_tokens || 0,
-          total: response.usage.total_tokens || 0,
-        }
-      : undefined;
+    const hasToolCalls = streamedToolCalls.size > 0;
 
     // ── Tool calls — show what commands are being executed ─────────
-    if (message.tool_calls && message.tool_calls.length > 0) {
-      const toolCallsMeta = message.tool_calls.map((tc: any) => ({
+    if (hasToolCalls) {
+      // Convert Map to array in index order
+      const toolCallArray = Array.from(streamedToolCalls.entries())
+        .sort(([a], [b]) => a - b)
+        .map(([_, tc]) => tc);
+
+      const toolCallsMeta = toolCallArray.map((tc) => ({
         id: tc.id,
-        name: tc.function.name,
-        arguments: tc.function.arguments,
+        name: tc.name,
+        arguments: tc.arguments,
       }));
 
       safeCall(
@@ -362,35 +406,45 @@ export async function runAgent(
           appendAssistantMessage(
             config.convexUrl,
             sessionId,
-            message.content || null,
+            streamedContent || null,
             toolCallsMeta.length > 0 ? toolCallsMeta : null,
-            usage,
+            streamUsage,
           ),
         'appendAssistantMessage',
       );
 
+      // Build tool_calls in OpenAI format for history
+      const openaiToolCalls = toolCallArray.map((tc) => ({
+        id: tc.id,
+        type: 'function',
+        function: {
+          name: tc.name,
+          arguments: tc.arguments,
+        },
+      }));
+
       messages.push({
         role: 'assistant',
-        content: message.content || null,
-        tool_calls: message.tool_calls,
+        content: streamedContent || null,
+        tool_calls: openaiToolCalls,
       } as ChatCompletionMessageParam);
 
       // Execute each tool call, showing what's running
-      for (const tc of message.tool_calls) {
+      for (const tc of toolCallArray) {
         let args: Record<string, unknown> = {};
         try {
-          args = JSON.parse(tc.function.arguments);
+          args = JSON.parse(tc.arguments);
         } catch { /* keep empty */ }
 
         // Update spinner to show what we're about to run
-        spin.update(`Running ${tc.function.name}…`);
+        spin.update(`Running ${tc.name}…`);
 
         const result = await executeTool(
           {
             id: tc.id,
             function: {
-              name: tc.function.name,
-              arguments: tc.function.arguments,
+              name: tc.name,
+              arguments: tc.arguments,
             },
           },
           config.workDir,
@@ -399,7 +453,8 @@ export async function runAgent(
         const ok = !result.content.startsWith('Error');
 
         // Display the tool line (stops spinner, prints line, restarts spinner)
-        displayToolLine(tc.function.name, args, ok, spin);
+        // Silent tools (e.g. diff) are suppressed inside displayToolLine
+        displayToolLine(tc.name, args, ok, spin);
 
         messages.push({
           role: 'tool',
@@ -414,7 +469,7 @@ export async function runAgent(
               config.convexUrl,
               sessionId,
               result.tool_call_id,
-              tc.function.name,
+              tc.name,
               result.content,
               isError,
             ),
@@ -429,11 +484,10 @@ export async function runAgent(
     // ── Final text response — the summary ──────────────────────────
     spin.stop();
 
-    const rawText = (message as any).content || '';
-    const text = stripThinking(rawText) || '(empty response)';
+    const text = stripThinking(streamedContent) || '(empty response)';
 
     safeCall(
-      () => appendAssistantMessage(config.convexUrl, sessionId, text, null, usage),
+      () => appendAssistantMessage(config.convexUrl, sessionId, text, null, streamUsage),
       'appendAssistantMessage',
     );
 

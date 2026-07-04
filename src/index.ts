@@ -132,9 +132,9 @@ async function main(): Promise<void> {
   try {
     const scanResult = await runScanner(config.workDir);
     if (scanResult.cached) {
-      process.stderr.write(` ${G_GRAY}(cached, ${scanResult.fileCount} files)${R}\n`);
-    } else {
       process.stderr.write(` ${G_GRAY}(${scanResult.fileCount} files)${R}\n`);
+    } else {
+      process.stderr.write(`${G_GRAY}Done — ${scanResult.fileCount} files indexed${R}\n`);
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
