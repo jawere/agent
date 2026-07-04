@@ -30,12 +30,22 @@ const RESET = '\x1b[0m';
 /** File-oriented tools get green; bash/grep/find get grey */
 const FILE_TOOLS = new Set(['read', 'write', 'edit', 'stat']);
 
+/** Web search gets aqua highlight */
+const SEARCH_TOOLS = new Set(['web_search', 'docs']);
+
 /** Tools whose execution lines are never shown to the user (silent) */
 const SILENT_TOOLS = new Set(['diff']);
 
 /** Build a compact tool detail string from args */
 function toolDetail(name: string, args: Record<string, unknown>): string {
   switch (name) {
+    case 'web_search':
+      return String(args.query || '?');
+    case 'docs': {
+      let d = String(args.query || '?');
+      if (args.library) d = `${args.library}: ${d}`;
+      return d;
+    }
     case 'read': {
       let d = String(args.path || '?');
       if (args.offset) d += ` [L${args.offset}${args.limit ? `-${Number(args.offset) + Number(args.limit) - 1}` : '+'}]`;
@@ -76,7 +86,7 @@ function displayToolLine(
 
   const statusIcon = ok ? '✓' : '✗';
   const statusColor = ok ? GRUVBOX_GREEN : GRUVBOX_RED;
-  const toolColor = FILE_TOOLS.has(name) ? GRUVBOX_GREEN : GRUVBOX_GRAY;
+  const toolColor = SEARCH_TOOLS.has(name) ? GRUVBOX_AQUA : FILE_TOOLS.has(name) ? GRUVBOX_GREEN : GRUVBOX_GRAY;
 
   const prefix = `${toolColor}${name}${RESET}: `;
   const suffix = ` ${statusColor}${statusIcon}${RESET}`;

@@ -117,11 +117,11 @@ tree:
     - agent.ts:
         type: other
         desc: "Agent loop — API calls, tool execution, spinner, retry logic."
-        size: 16596
+        size: 16921
     - config.ts:
         type: other
         desc: "Configuration loading and management."
-        size: 2145
+        size: 2212
     - convex-client.ts:
         type: other
         desc: "Convex backend client for session persistence."
@@ -133,7 +133,7 @@ tree:
     - index.ts:
         type: other
         desc: "Main entry point and REPL loop."
-        size: 10975
+        size: 10981
     - prompt.ts:
         type: other
         desc: "System prompt definition for the agent."
@@ -141,7 +141,7 @@ tree:
     - scanner.ts:
         type: other
         desc: "Background codebase scanner — generates tree.yaml cache."
-        size: 18785
+        size: 19882
     - spinner.ts:
         type: other
         desc: "Exports: Spinner, createSpinner."
@@ -149,11 +149,11 @@ tree:
     - system-prompt.ts:
         type: other
         desc: "System prompt definition for the agent."
-        size: 6876
+        size: 7655
     - tools.ts:
         type: other
         desc: "Tool definitions and implementations for agent actions."
-        size: 26218
+        size: 41962
 
 # ── File summaries (for quick agent context) ────────────────────────
 
@@ -279,14 +279,14 @@ summaries:
     description: |
       Build/bundler script.
   "src/agent.ts":
-    lines: 507
+    lines: 517
     exports: ["AgentOptions", "AgentResult", "printAssistantResponse", "runAgent"]
     key_functions: ["COL", "toolDetail", "displayToolLine", "safeCall", "withRetry", "stripThinking", "printAssistantResponse", "runAgent"]
     depends_on: ["./system-prompt.js", "./tools.js", "./config.js", "./spinner.js", "./convex-client.js"]
     description: |
       Agent loop — API calls, tool execution, spinner, retry logic.
   "src/config.ts":
-    lines: 74
+    lines: 81
     exports: ["Config", "loadConfig", "hasApiKey"]
     key_functions: ["isDevMode", "loadConfig", "hasApiKey"]
     depends_on: ["./crypto.js"]
@@ -318,7 +318,7 @@ summaries:
     description: |
       System prompt definition for the agent.
   "src/scanner.ts":
-    lines: 576
+    lines: 606
     exports: ["cacheIsStale", "loadChecksums", "runScanner"]
     key_functions: ["hashFile", "getGitHash", "isBinary", "classifyFile", "extractExports", "extractImports", "extractKeyFunctions", "generateDescription", "summarizeFile", "cacheIsStale", "loadChecksums", "getAllFiles", "buildTree", "getProjectInfo", "scanCodebase", "generateTreeYaml", "escapeYaml", "formatSize", "runScanner"]
     description: |
@@ -330,14 +330,14 @@ summaries:
     description: |
       Exports: Spinner, createSpinner.
   "src/system-prompt.ts":
-    lines: 137
+    lines: 148
     exports: ["SYSTEM_PROMPT"]
     description: |
       System prompt definition for the agent.
   "src/tools.ts":
-    lines: 828
+    lines: 1250
     exports: ["ToolCall", "ToolResult", "OpenAITool", "TOOL_DEFS", "executeTool"]
-    key_functions: ["truncateOutput", "execBash", "readFileTool", "diffSummary", "editFileTool", "writeFileTool", "lsTool", "findTool", "grepTool", "statTool", "diffTool", "executeTool"]
+    key_functions: ["truncateOutput", "execBash", "readFileTool", "diffSummary", "editFileTool", "writeFileTool", "lsTool", "findTool", "grepTool", "statTool", "diffTool", "httpsGetJSON", "webSearchTool", "resolveDocSites", "docsSearchTool", "executeTool"]
     description: |
       Tool definitions and implementations for agent actions.
   "tsconfig.json":

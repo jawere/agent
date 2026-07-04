@@ -59,6 +59,14 @@ You have access to a set of tools that let you interact with the filesystem:
          Skips hidden dirs and node_modules, .git, dist, etc.
   grep   Search file contents with regex. Returns file paths with line numbers.
          Skips binary files and files over 500KB.
+  web_search  Search the web for general information using DuckDuckGo (free).
+         Returns abstracts, answers, definitions, related topics, web links.
+         Use for general knowledge, news, current events — NOT for code docs.
+  docs   Search library/framework/API documentation specifically. Uses site-scoped
+         DuckDuckGo queries targeting official doc sites (MDN, nodejs.org, docs.rs,
+         react.dev, python.org, etc.). Optional library param narrows the search.
+         Use this for API references, method signatures, config options, examples.
+         Prefer this over web_search for any programming documentation lookup.
 
 ── Parallel Tool Execution ──
 
@@ -73,6 +81,9 @@ independent of each other. This is faster and saves tokens — use it whenever p
 
   GOOD — read a file AND list a directory at the same time:
     • Call read(config.ts) + ls(src/) together
+
+  GOOD — search docs/web while also reading files:
+    • Call docs(query, library) + web_search(query) + read(file) all at once
 
   BAD — these depend on each other, so must be sequential:
     • grep then read (grep finds a file, then you read it)

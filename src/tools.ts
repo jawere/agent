@@ -2,6 +2,7 @@ import { exec, ExecOptions } from 'child_process';
 import { readFile, writeFile, mkdir, access, stat as fsStat } from 'fs/promises';
 import { constants } from 'fs';
 import { resolve, dirname } from 'path';
+import { get as httpsGet } from 'https';
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -255,6 +256,60 @@ export const TOOL_DEFS: OpenAITool[] = [
           },
         },
         required: ['pattern'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'web_search',
+      description:
+        'Search the web for information. Uses DuckDuckGo (free, no API key needed). ' +
+        'Returns relevant results including abstracts, answers, related topics, and web links. ' +
+        'Use this for general knowledge, news, current events, or broad information not found locally.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'Search query string',
+          },
+          count: {
+            type: 'number',
+            description: 'Maximum number of results to return (default 5, max 10)',
+          },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'docs',
+      description:
+        'Search library, framework, and API documentation. Uses DuckDuckGo site-targeted ' +
+        'queries to search official documentation sources (MDN, Node.js docs, npm packages, ' +
+        'Rust docs, Python docs, Go docs, etc.). Free — no API key needed. ' +
+        'Use this for API signatures, method references, configuration options, ' +
+        'package usage examples, or any programming documentation lookup.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'Documentation search query (e.g. "fs.readFile options", "React useEffect cleanup")',
+          },
+          library: {
+            type: 'string',
+            description: 'Optional library/package name to narrow search (e.g. "react", "typescript", "express")',
+          },
+          count: {
+            type: 'number',
+            description: 'Maximum results (default 5, max 8)',
+          },
+        },
+        required: ['query'],
       },
     },
   },
@@ -744,6 +799,360 @@ async function diffTool(
   return execBash(`git ${args.join(' ')}`, workDir, 30);
 }
 
+// ── Web search tool ─────────────────────────────────────────────────
+
+interface DDGResponse {
+  Abstract?: string;
+  AbstractText?: string;
+  AbstractSource?: string;
+  AbstractURL?: string;
+  Answer?: string;
+  AnswerType?: string;
+  Definition?: string;
+  DefinitionSource?: string;
+  Heading?: string;
+  RelatedTopics?: Array<{ Text?: string; FirstURL?: string }>;
+  Results?: Array<{ Text?: string; FirstURL?: string }>;
+  Infobox?: {
+    content?: Array<{ label?: string; value?: string; data_type?: string }>;
+    meta?: Array<{ label?: string; value?: string }>;
+  };
+}
+
+function httpsGetJSON(url: string, timeout = 8000): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const req = httpsGet(url, { timeout }, (res) => {
+      // Follow redirects (up to 3)
+      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        httpsGetJSON(res.headers.location, timeout).then(resolve).catch(reject);
+        return;
+      }
+      let data = '';
+      res.on('data', (chunk: Buffer) => {
+        data += chunk.toString();
+        if (data.length > 500_000) {
+          res.destroy();
+          reject(new Error('Response too large'));
+        }
+      });
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(data));
+        } catch {
+          reject(new Error(`Failed to parse JSON (status ${res.statusCode})`));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Request timed out'));
+    });
+  });
+}
+
+async function webSearchTool(query: string, count?: number): Promise<string> {
+  const maxResults = Math.min(Math.max(count ?? 5, 1), 10);
+  const encoded = encodeURIComponent(query);
+  const ddgUrl = `https://api.duckduckgo.com/?q=${encoded}&format=json&no_html=1&skip_disambig=1`;
+
+  let json: DDGResponse;
+  try {
+    json = await httpsGetJSON(ddgUrl, 10000) as DDGResponse;
+  } catch (err: any) {
+    return `Error: Web search failed — ${err.message || err}`;
+  }
+
+  const parts: string[] = [];
+
+  // Heading
+  if (json.Heading && json.Heading !== query) {
+    parts.push(`Topic: ${json.Heading}`);
+  }
+
+  // Direct answer (calculator, weather, etc.)
+  if (json.Answer) {
+    parts.push(`Answer: ${json.Answer}`);
+  }
+
+  // Abstract/summary
+  if (json.AbstractText && json.AbstractText.trim()) {
+    let abstract = json.AbstractText.trim();
+    if (json.AbstractSource) {
+      abstract += ` [Source: ${json.AbstractSource}]`;
+    }
+    if (json.AbstractURL) {
+      abstract += ` — ${json.AbstractURL}`;
+    }
+    parts.push(`Summary: ${abstract}`);
+  } else if (json.Abstract && json.Abstract.trim()) {
+    parts.push(`Summary: ${json.Abstract.trim()}`);
+  }
+
+  // Definition
+  if (json.Definition) {
+    let def = `Definition: ${json.Definition}`;
+    if (json.DefinitionSource) def += ` [Source: ${json.DefinitionSource}]`;
+    parts.push(def);
+  }
+
+  // Infobox (structured data)
+  if (json.Infobox?.content) {
+    const fields = json.Infobox.content
+      .filter((c) => c.label && c.value)
+      .map((c) => `  ${c.label}: ${c.value}`)
+      .slice(0, 8);
+    if (fields.length > 0) {
+      parts.push(`Details:\n${fields.join('\n')}`);
+    }
+  }
+
+  // Related topics
+  if (json.RelatedTopics && json.RelatedTopics.length > 0) {
+    const topics: string[] = [];
+    for (const t of json.RelatedTopics) {
+      if (topics.length >= maxResults) break;
+      if (t.Text && t.FirstURL) {
+        // Extract title from the Text field (often "Title — Description" format)
+        const cleanText = t.Text.replace(/<[^>]+>/g, '').trim();
+        topics.push(`  - ${cleanText.slice(0, 200)}\n    ${t.FirstURL}`);
+      } else if (t.Text) {
+        topics.push(`  - ${t.Text.replace(/<[^>]+>/g, '').trim().slice(0, 200)}`);
+      }
+    }
+    if (topics.length > 0) {
+      parts.push(`Related:\n${topics.join('\n')}`);
+    }
+  }
+
+  // Web results (sometimes included)
+  if (json.Results && json.Results.length > 0) {
+    const results: string[] = [];
+    for (const r of json.Results) {
+      if (results.length >= maxResults) break;
+      if (r.Text && r.FirstURL) {
+        results.push(`  - ${r.Text.replace(/<[^>]+>/g, '').trim().slice(0, 200)}\n    ${r.FirstURL}`);
+      }
+    }
+    if (results.length > 0) {
+      parts.push(`Web Results:\n${results.join('\n')}`);
+    }
+  }
+
+  if (parts.length === 0) {
+    return `No results found for "${query}". Try different keywords or be more specific.`;
+  }
+
+  return truncateOutput(parts.join('\n\n')).text;
+}
+
+// ── Documentation search ────────────────────────────────────────────
+
+/**
+ * Known documentation domains — DuckDuckGo site:-scoped searches.
+ * Each entry maps a library pattern to site: domains that have official docs.
+ */
+const KNOWN_DOC_SITES: Array<{ patterns: string[]; sites: string[] }> = [
+  // JavaScript/TypeScript ecosystem
+  { patterns: ['node', 'nodejs', 'node.js'], sites: ['nodejs.org', 'nodejs.dev'] },
+  { patterns: ['javascript', 'js', 'mozilla', 'mdn'], sites: ['developer.mozilla.org'] },
+  { patterns: ['typescript', 'ts'], sites: ['typescriptlang.org'] },
+  { patterns: ['react', 'reactjs', 'react.js'], sites: ['react.dev', 'reactjs.org', 'legacy.reactjs.org'] },
+  { patterns: ['express', 'expressjs', 'express.js'], sites: ['expressjs.com'] },
+  { patterns: ['next', 'nextjs', 'next.js'], sites: ['nextjs.org'] },
+  { patterns: ['vue', 'vuejs', 'vue.js'], sites: ['vuejs.org'] },
+  { patterns: ['svelte', 'sveltekit'], sites: ['svelte.dev', 'kit.svelte.dev'] },
+  { patterns: ['tailwind', 'tailwindcss'], sites: ['tailwindcss.com'] },
+  { patterns: ['prisma'], sites: ['prisma.io'] },
+  { patterns: ['vite'], sites: ['vitejs.dev'] },
+  { patterns: ['esbuild'], sites: ['esbuild.github.io'] },
+  { patterns: ['webpack'], sites: ['webpack.js.org'] },
+  { patterns: ['babel'], sites: ['babeljs.io'] },
+  { patterns: ['eslint'], sites: ['eslint.org'] },
+  { patterns: ['prettier'], sites: ['prettier.io'] },
+  { patterns: ['jest'], sites: ['jestjs.io'] },
+  { patterns: ['vitest'], sites: ['vitest.dev'] },
+  { patterns: ['playwright'], sites: ['playwright.dev'] },
+  { patterns: ['cypress'], sites: ['cypress.io', 'docs.cypress.io'] },
+  { patterns: ['graphql'], sites: ['graphql.org'] },
+  { patterns: ['apollo'], sites: ['apollographql.com'] },
+  { patterns: ['trpc'], sites: ['trpc.io'] },
+  { patterns: ['zod'], sites: ['github.com/colinhacks/zod', 'zod.dev'] },
+  { patterns: ['axios'], sites: ['axios-http.com'] },
+  { patterns: ['npm'], sites: ['npmjs.com', 'docs.npmjs.com'] },
+  { patterns: ['pnpm'], sites: ['pnpm.io'] },
+  { patterns: ['yarn'], sites: ['yarnpkg.com'] },
+  { patterns: ['deno'], sites: ['deno.com', 'deno.land', 'docs.deno.com'] },
+  { patterns: ['bun'], sites: ['bun.sh'] },
+  // Python
+  { patterns: ['python', 'py'], sites: ['docs.python.org'] },
+  { patterns: ['django'], sites: ['djangoproject.com', 'docs.djangoproject.com'] },
+  { patterns: ['flask'], sites: ['flask.palletsprojects.com'] },
+  { patterns: ['fastapi'], sites: ['fastapi.tiangolo.com'] },
+  { patterns: ['pydantic'], sites: ['docs.pydantic.dev'] },
+  { patterns: ['pytest'], sites: ['docs.pytest.org'] },
+  { patterns: ['poetry'], sites: ['python-poetry.org'] },
+  { patterns: ['numpy'], sites: ['numpy.org'] },
+  { patterns: ['pandas'], sites: ['pandas.pydata.org'] },
+  { patterns: ['sqlalchemy'], sites: ['docs.sqlalchemy.org'] },
+  { patterns: ['alembic'], sites: ['alembic.sqlalchemy.org'] },
+  // Rust
+  { patterns: ['rust', 'cargo', 'rustc'], sites: ['doc.rust-lang.org', 'docs.rs'] },
+  { patterns: ['tokio'], sites: ['docs.rs/tokio', 'tokio.rs'] },
+  { patterns: ['serde'], sites: ['docs.rs/serde', 'serde.rs'] },
+  { patterns: ['actix'], sites: ['actix.rs', 'docs.rs/actix-web'] },
+  { patterns: ['axum'], sites: ['docs.rs/axum'] },
+  { patterns: ['bevy'], sites: ['bevyengine.org', 'docs.rs/bevy'] },
+  // Go
+  { patterns: ['go', 'golang'], sites: ['pkg.go.dev', 'go.dev'] },
+  { patterns: ['gin'], sites: ['gin-gonic.com', 'pkg.go.dev/github.com/gin-gonic'] },
+  { patterns: ['echo'], sites: ['echo.labstack.com', 'pkg.go.dev/github.com/labstack/echo'] },
+  { patterns: ['fiber'], sites: ['docs.gofiber.io', 'pkg.go.dev/github.com/gofiber/fiber'] },
+  // Ruby
+  { patterns: ['ruby', 'rubygems'], sites: ['ruby-doc.org', 'rubygems.org'] },
+  { patterns: ['rails', 'ruby on rails'], sites: ['guides.rubyonrails.org', 'api.rubyonrails.org'] },
+  { patterns: ['rspec'], sites: ['rspec.info', 'rubydoc.info'] },
+  // Other
+  { patterns: ['linux', 'man'], sites: ['man7.org', 'linux.die.net'] },
+  { patterns: ['git'], sites: ['git-scm.com'] },
+  { patterns: ['docker'], sites: ['docs.docker.com'] },
+  { patterns: ['kubernetes', 'k8s'], sites: ['kubernetes.io'] },
+  { patterns: ['nginx'], sites: ['nginx.org', 'nginx.com'] },
+  { patterns: ['postgresql', 'postgres', 'pg'], sites: ['postgresql.org'] },
+  { patterns: ['mysql'], sites: ['dev.mysql.com'] },
+  { patterns: ['redis'], sites: ['redis.io'] },
+  { patterns: ['mongodb', 'mongo'], sites: ['mongodb.com', 'docs.mongodb.com'] },
+  { patterns: ['sqlite'], sites: ['sqlite.org'] },
+  { patterns: ['aws'], sites: ['docs.aws.amazon.com'] },
+  // Add more as needed — this list guides the agent to official docs
+];
+
+/** Resolve site: targets for a library name or query */
+function resolveDocSites(query: string, library?: string): string[] {
+  const searchTerms = (library ? `${library} ${query}` : query).toLowerCase();
+  const sites: string[] = [];
+
+  for (const entry of KNOWN_DOC_SITES) {
+    for (const pat of entry.patterns) {
+      if (searchTerms.includes(pat) && !sites.some((s) => entry.sites.includes(s))) {
+        sites.push(...entry.sites);
+        break;
+      }
+    }
+  }
+
+  return sites;
+}
+
+async function docsSearchTool(
+  query: string,
+  library?: string,
+  count?: number,
+  useSites = true,
+): Promise<string> {
+  const maxResults = Math.min(Math.max(count ?? 5, 1), 8);
+  const sites = useSites ? resolveDocSites(query, library) : [];
+
+  // Build query
+  let searchQuery: string;
+  if (library) {
+    searchQuery = `${library} ${query}`;
+  } else {
+    searchQuery = query;
+  }
+
+  // If we have known doc sites, prioritize them with site: scoping
+  if (sites.length > 0) {
+    const siteFilters = sites.map((s) => `site:${s}`).join(' OR ');
+    searchQuery = `${searchQuery} (${siteFilters})`;
+  } else {
+    // Generic doc search — append "documentation" to bias results
+    searchQuery = `${searchQuery} documentation`;
+  }
+
+  const ddgUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(searchQuery)}&format=json&no_html=1&skip_disambig=1`;
+
+  let json: DDGResponse;
+  try {
+    json = await httpsGetJSON(ddgUrl, 10000) as DDGResponse;
+  } catch (err: any) {
+    return `Error: Docs search failed — ${err.message || err}`;
+  }
+
+  const parts: string[] = [];
+  const headerParts: string[] = [];
+  if (library) headerParts.push(`Library: ${library}`);
+  if (sites.length > 0) headerParts.push(`Sources: ${sites.join(', ')}`);
+  if (headerParts.length > 0) {
+    parts.push(headerParts.join(' | '));
+  }
+
+  // Direct answer
+  if (json.Answer) {
+    parts.push(`Answer: ${json.Answer}`);
+  }
+
+  // Abstract
+  if (json.AbstractText && json.AbstractText.trim()) {
+    const abstract = json.AbstractText.trim();
+    const source = json.AbstractSource ? ` [${json.AbstractSource}]` : '';
+    const url = json.AbstractURL ? ` — ${json.AbstractURL}` : '';
+    parts.push(`Summary: ${abstract}${source}${url}`);
+  } else if (json.Abstract && json.Abstract.trim()) {
+    parts.push(`Summary: ${json.Abstract.trim()}`);
+  }
+
+  // Definition
+  if (json.Definition) {
+    let def = `Definition: ${json.Definition}`;
+    if (json.DefinitionSource) def += ` [Source: ${json.DefinitionSource}]`;
+    parts.push(def);
+  }
+
+  // Related topics — primary results
+  if (json.RelatedTopics && json.RelatedTopics.length > 0) {
+    const topics: string[] = [];
+    for (const t of json.RelatedTopics) {
+      if (topics.length >= maxResults) break;
+      if (t.Text && t.FirstURL) {
+        const cleanText = t.Text.replace(/<[^>]+>/g, '').trim();
+        topics.push(`  - ${cleanText.slice(0, 250)}\n    ${t.FirstURL}`);
+      } else if (t.Text) {
+        topics.push(`  - ${t.Text.replace(/<[^>]+>/g, '').trim().slice(0, 250)}`);
+      }
+    }
+    if (topics.length > 0) {
+      parts.push(`Documentation Results:\n${topics.join('\n')}`);
+    }
+  }
+
+  // Web results
+  if (json.Results && json.Results.length > 0) {
+    const results: string[] = [];
+    for (const r of json.Results) {
+      if (results.length >= maxResults) break;
+      if (r.Text && r.FirstURL) {
+        results.push(`  - ${r.Text.replace(/<[^>]+>/g, '').trim().slice(0, 200)}\n    ${r.FirstURL}`);
+      }
+    }
+    if (results.length > 0) {
+      parts.push(`More:\n${results.join('\n')}`);
+    }
+  }
+
+  // Header-only means no content — fall back to broad search without site: scoping
+  const hasContent = parts.length > (headerParts.length > 0 ? 1 : 0);
+  if (!hasContent && sites.length > 0) {
+    return docsSearchTool(query, library, count, false);
+  }
+
+  if (!hasContent) {
+    return `No documentation results for "${query}". Try different terms or use web_search for broader results.`;
+  }
+
+  return truncateOutput(parts.join('\n\n')).text;
+}
+
 // ── Tool dispatcher ─────────────────────────────────────────────────
 
 export async function executeTool(
@@ -811,6 +1220,19 @@ export async function executeTool(
         break;
       case 'stat':
         result = await statTool(args.path as string, workDir);
+        break;
+      case 'web_search':
+        result = await webSearchTool(
+          args.query as string,
+          args.count as number | undefined,
+        );
+        break;
+      case 'docs':
+        result = await docsSearchTool(
+          args.query as string,
+          args.library as string | undefined,
+          args.count as number | undefined,
+        );
         break;
       default:
         result = `Error: Unknown tool: ${fn.name}`;
