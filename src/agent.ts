@@ -68,7 +68,6 @@ function displayToolLine(
     spin.stop();
   }
 
-  const cols = COL();
   const statusIcon = ok ? '✓' : '✗';
   const statusColor = ok ? GRUVBOX_GREEN : GRUVBOX_RED;
   const toolColor = FILE_TOOLS.has(name) ? GRUVBOX_GREEN : GRUVBOX_GRAY;
@@ -76,17 +75,9 @@ function displayToolLine(
   const prefix = `${toolColor}${name}${RESET}: `;
   const suffix = ` ${statusColor}${statusIcon}${RESET}`;
 
-  const prefixVis = `${name}: `.length;
-  const suffixVis = ` ${statusIcon}`.length;
-  const detailMax = cols - prefixVis - suffixVis;
-
   let detail = toolDetail(name, args);
-  if (detail.length > detailMax) {
-    detail = detail.slice(0, Math.max(0, detailMax - 1)) + '…';
-  }
 
-  const pad = cols - prefixVis - detail.length - suffixVis;
-  process.stdout.write(`${prefix}${detail}${' '.repeat(Math.max(0, pad))}${suffix}\n`);
+  process.stdout.write(`${prefix}${detail}${suffix}\n`);
 
   // Restart spinner after the tool line
   if (spin) {
@@ -436,7 +427,7 @@ export async function runAgent(
     }
 
     // ── Final text response — the summary ──────────────────────────
-    spin.stop('Done');
+    spin.stop();
 
     const rawText = (message as any).content || '';
     const text = stripThinking(rawText) || '(empty response)';
