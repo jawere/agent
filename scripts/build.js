@@ -17,6 +17,9 @@ await esbuild.build({
   external: ['tsx', 'esbuild'], // never bundle these
   sourcemap: false,
   minify: false,
+  banner: {
+    js: `import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);`,
+  },
 });
 
 // Copy convex backend into dist (needed at runtime for convex deploy)
