@@ -31,6 +31,9 @@ const SEARCH_TOOLS = new Set(['web_search', 'docs']);
 /** Tools whose execution lines are never shown to the user (silent) */
 const SILENT_TOOLS = new Set(['diff']);
 
+/** Read-only tools that can safely execute in parallel */
+const PARALLEL_SAFE = new Set(['read', 'stat', 'ls', 'find', 'grep', 'diff', 'web_search', 'docs']);
+
 /** Build a compact tool detail string from args */
 function toolDetail(name: string, args: Record<string, unknown>): string {
   switch (name) {
@@ -53,7 +56,12 @@ function toolDetail(name: string, args: Record<string, unknown>): string {
       if (Array.isArray(args.edits)) d += ` (${args.edits.length} edit${args.edits.length !== 1 ? 's' : ''})`;
       return d;
     }
-    case 'bash':
+    case 'bash': {
+      let cmd = String(args.command || '?');
+      // Truncate very long commands for display
+      if (cmd.length > 80) cmd = cmd.slice(0, 77) + '…';
+      return cmd;
+    }
     case 'grep':
     case 'find':
     case 'ls':
@@ -278,11 +286,12 @@ export async function runAgent(
       return { text: msg, sessionId, history: messages };
     }
 
-    // Update spinner message before API call
+    // Update spinner before API call
     spin.update('Thinking…');
 
     // ── Streaming API call — accumulate silently, only show final response ──
     let streamedContent = '';
+    let deltaChunkCount = 0;
     const streamedToolCalls: Map<number, { id: string; name: string; arguments: string }> = new Map();
     let streamUsage: { input: number; output: number; total: number } | undefined;
 
@@ -308,6 +317,8 @@ export async function runAgent(
       for await (const chunk of stream) {
         // Check cancellation mid-stream
         if (options.signal?.aborted) break;
+
+        deltaChunkCount++;
 
         const delta = (chunk as any).choices?.[0]?.delta;
         if (!delta) {
@@ -341,8 +352,8 @@ export async function runAgent(
           }
         }
 
-        // Update spinner occasionally (not on every chunk to avoid flicker)
-        spin.update('Thinking…');
+        // Throttle spinner updates during streaming (every ~50 chunks)
+        if (deltaChunkCount % 50 === 0) spin.update('Thinking…');
       }
     } catch (err: any) {
       if (err.name === 'AbortError' || err.name === 'Canceled') {
@@ -385,40 +396,70 @@ export async function runAgent(
         tool_calls: openaiToolCalls,
       } as ChatCompletionMessageParam);
 
-      // Execute each tool call, showing what's running
-      for (const tc of toolCallArray) {
-        let args: Record<string, unknown> = {};
-        try {
-          args = JSON.parse(tc.arguments);
-        } catch { /* keep empty */ }
+      // Execute tool calls — parallel when safe, sequential otherwise
+      const allParallelSafe = toolCallArray.every((tc) => PARALLEL_SAFE.has(tc.name));
 
-        // Update spinner to show what we're about to run
-        spin.update(`Running ${tc.name}…`);
+      if (allParallelSafe && toolCallArray.length > 1) {
+        // ── Parallel execution for read-only tools ──
+        spin.update(`Running ${toolCallArray.length} tools in parallel…`);
 
-        const result = await executeTool(
-          {
-            id: tc.id,
-            function: {
-              name: tc.name,
-              arguments: tc.arguments,
-            },
-          },
-          config.workDir,
+        const results = await Promise.all(
+          toolCallArray.map((tc) =>
+            executeTool(
+              { id: tc.id, function: { name: tc.name, arguments: tc.arguments } },
+              config.workDir,
+            ),
+          ),
         );
 
-        const ok = !result.content.startsWith('Error');
+        // Display tool lines and add results to messages
+        for (let i = 0; i < toolCallArray.length; i++) {
+          const tc = toolCallArray[i];
+          const result = results[i];
+          let args: Record<string, unknown> = {};
+          try { args = JSON.parse(tc.arguments); } catch { /* keep empty */ }
+          const ok = !result.content.startsWith('Error');
+          displayToolLine(tc.name, args, ok, spin);
+          messages.push({
+            role: 'tool',
+            tool_call_id: result.tool_call_id,
+            content: result.content,
+          } as unknown as ChatCompletionMessageParam);
+        }
+      } else {
+        // ── Sequential execution (mixed read/write or single tool) ──
+        for (const tc of toolCallArray) {
+          let args: Record<string, unknown> = {};
+          try {
+            args = JSON.parse(tc.arguments);
+          } catch { /* keep empty */ }
 
-        // Display the tool line (stops spinner, prints line, restarts spinner)
-        // Silent tools (e.g. diff) are suppressed inside displayToolLine
-        displayToolLine(tc.name, args, ok, spin);
+          // Update spinner to show what we're about to run
+          spin.update(`Running ${tc.name}…`);
 
-        messages.push({
-          role: 'tool',
-          tool_call_id: result.tool_call_id,
-          content: result.content,
-        } as unknown as ChatCompletionMessageParam);
+          const result = await executeTool(
+            {
+              id: tc.id,
+              function: {
+                name: tc.name,
+                arguments: tc.arguments,
+              },
+            },
+            config.workDir,
+          );
 
+          const ok = !result.content.startsWith('Error');
 
+          // Display the tool line (stops spinner, prints line, restarts spinner)
+          // Silent tools (e.g. diff) are suppressed inside displayToolLine
+          displayToolLine(tc.name, args, ok, spin);
+
+          messages.push({
+            role: 'tool',
+            tool_call_id: result.tool_call_id,
+            content: result.content,
+          } as unknown as ChatCompletionMessageParam);
+        }
       }
 
       // Continue loop to next API call (spinner still running)

@@ -1,5 +1,5 @@
 import { exec, ExecOptions } from 'child_process';
-import { readFile, writeFile, mkdir, access, stat as fsStat } from 'fs/promises';
+import { readFile, writeFile, mkdir, access, readdir, stat as fsStat } from 'fs/promises';
 import { constants } from 'fs';
 import { resolve, dirname } from 'path';
 import { get as httpsGet } from 'https';
@@ -584,7 +584,6 @@ async function lsTool(path: string | undefined, workDir: string): Promise<string
   } catch (err: any) {
     return `Error: ${err.message}`;
   }
-  const { readdir, stat } = await import('fs/promises');
   try {
     const entries = await readdir(dir, { withFileTypes: true });
     if (entries.length === 0) return `(empty directory: ${dir})`;
@@ -595,7 +594,7 @@ async function lsTool(path: string | undefined, workDir: string): Promise<string
         const full = resolve(dir, e.name);
         let size = '';
         try {
-          const s = await stat(full);
+          const s = await fsStat(full);
           if (s.isFile()) {
             const kb = s.size / 1024;
             size = kb >= 1000 ? `${(kb / 1024).toFixed(1)}M` : kb >= 1 ? `${kb.toFixed(0)}K` : `${s.size}B`;
@@ -652,7 +651,6 @@ async function findTool(
     if (depth > 8 || results.length >= MAX_RESULTS) return;
     let entries;
     try {
-      const { readdir } = await import('fs/promises');
       entries = await readdir(dir, { withFileTypes: true });
     } catch {
       return;
@@ -731,7 +729,6 @@ async function grepTool(
     if (depth > 8 || results.length >= MAX_MATCHES) return;
     let entries;
     try {
-      const { readdir, stat } = await import('fs/promises');
       entries = await readdir(dir, { withFileTypes: true });
     } catch {
       return;
@@ -752,8 +749,7 @@ async function grepTool(
         }
         // Size check
         try {
-          const { stat } = await import('fs/promises');
-          const s = await stat(full);
+          const s = await fsStat(full);
           if (s.size > MAX_FILE_SIZE) continue;
         } catch {
           continue;
@@ -777,7 +773,7 @@ async function grepTool(
   }
 
   try {
-    const s = await (await import('fs/promises')).stat(base);
+    const s = await fsStat(base);
     if (s.isFile()) {
       // Single file mode
       const content = await readFile(base, 'utf-8');

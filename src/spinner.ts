@@ -128,9 +128,10 @@ export function createSpinner(): Spinner {
       }, FRAME_INTERVAL);
     },
 
-    update(_message: string) {
-      // Force an immediate redraw with a new random word
-      draw('');
+    update(message: string) {
+      // Show the actual message for important state changes
+      currentMessage = message;
+      draw(message);
     },
 
     stop(finalMessage?: string) {
