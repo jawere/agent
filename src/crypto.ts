@@ -7,11 +7,11 @@ import { join } from 'path';
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
 const TAG_LENGTH = 16;
-const SALT = 'ponytail-agent-key-vault-2026';
+const SALT = 'jawere-agent-key-vault-2026';
 
 /** Derive a 256-bit key from machine identity. Not perfect security but better than plaintext. */
 function deriveKey(): Buffer {
-  const machineId = `${hostname()}-${userInfo().username}-ponytail`;
+  const machineId = `${hostname()}-${userInfo().username}-jawere`;
   return scryptSync(machineId, SALT, 32);
 }
 
@@ -42,17 +42,17 @@ export function decrypt(encoded: string): string | null {
   }
 }
 
-const KEY_FILE = join(homedir(), '.ponytail', 'key.enc');
+const KEY_FILE = join(homedir(), '.jawere', 'key.enc');
 
-/** Save encrypted API key to ~/.ponytail/key.enc */
+/** Save encrypted API key to ~/.jawere/key.enc */
 export async function saveKey(apiKey: string): Promise<void> {
-  const dir = join(homedir(), '.ponytail');
+  const dir = join(homedir(), '.jawere');
   await mkdir(dir, { recursive: true });
   const encrypted = encrypt(apiKey.trim());
   await writeFile(KEY_FILE, encrypted, 'utf-8');
 }
 
-/** Load and decrypt API key from ~/.ponytail/key.enc. Returns null if not found or corrupt. */
+/** Load and decrypt API key from ~/.jawere/key.enc. Returns null if not found or corrupt. */
 export async function loadKey(): Promise<string | null> {
   try {
     await access(KEY_FILE, constants.R_OK);

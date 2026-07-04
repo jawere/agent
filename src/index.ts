@@ -63,7 +63,7 @@ async function setupKey(): Promise<void> {
   }
 
   await saveKey(key);
-  console.log(`API key encrypted and saved to ~/.ponytail/key.enc`);
+  console.log(`API key encrypted and saved to ~/.jawere/key.enc`);
 }
 
 async function showSessions(convexUrl: string): Promise<Map<number, string>> {
@@ -108,14 +108,14 @@ async function main(): Promise<void> {
   if (!config.apiKey) {
     const hasExistingKey = await hasKey();
     console.log('╔══════════════════════════════════════════╗');
-    console.log('║   Welcome — AI Coding Agent                 ║');
+    console.log('║   jawere — AI Coding Agent                  ║');
     console.log('╠══════════════════════════════════════════╣');
     console.log('║ No API key found.                        ║');
     console.log('║                                          ║');
     console.log('║ Option 1: Set DEEPSEEK_API_KEY env var   ║');
     console.log('║ Option 2: Run --setup to encrypt & save  ║');
     console.log('║                                          ║');
-    console.log('║   npx tsx src/index.ts --setup           ║');
+    console.log('║   npx tsx src/index.ts --setup            ║');
     console.log('╚══════════════════════════════════════════╝');
     process.exit(1);
   }

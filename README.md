@@ -1,4 +1,4 @@
-# ponytail — AI Coding Agent
+# jawere — AI Coding Agent
 
 Terminal-based AI coding assistant powered by DeepSeek. Runs as an interactive REPL — describe tasks in natural language, and the agent reads, edits, writes, and executes shell commands autonomously.
 

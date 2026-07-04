@@ -1,10 +1,10 @@
-# ponytail — Convex Backend
+# jawere — Convex Backend
 
-This directory contains the [Convex](https://convex.dev) backend for **ponytail**, the AI coding agent. It provides persistent storage for sessions, messages, custom tool definitions, and token usage tracking.
+This directory contains the [Convex](https://convex.dev) backend for **jawere**, the AI coding agent. It provides persistent storage for sessions, messages, custom tool definitions, and token usage tracking.
 
 ## What it does
 
-The Convex backend stores every conversation (session) that the ponytail agent runs. Each session contains the full history of user messages, assistant responses, tool calls, and tool results — all with timestamps and token usage data. This allows you to resume any session later with `/load <id>`.
+The Convex backend stores every conversation (session) that the jawere agent runs. Each session contains the full history of user messages, assistant responses, tool calls, and tool results — all with timestamps and token usage data. This allows you to resume any session later with `/load <id>`.
 
 ## Schema
 

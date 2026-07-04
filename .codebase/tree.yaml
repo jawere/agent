@@ -1,10 +1,10 @@
-# ponytail — Full Codebase Tree (auto-generated)
+# jawere — Full Codebase Tree (auto-generated)
 # Generated: 2026-07-04
 # Updated by background scanner agent before each session.
 # This file is consumed by the main agent so it doesn't need to re-scan.
 
 project:
-  name: ponytail
+  name: jawere
   version: 1.0.12
   language: typescript
   type: terminal-ai-coding-agent
