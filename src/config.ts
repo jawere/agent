@@ -1,9 +1,5 @@
 import { loadKey, hasKey } from './crypto.js';
 
-// Convex deployments
-const CONVEX_DEV = 'https://dazzling-jackal-33.convex.cloud';
-const CONVEX_PROD = 'https://friendly-pigeon-624.convex.cloud';
-
 export interface Config {
   /** DeepSeek API base URL */
   baseURL: string;
@@ -13,8 +9,6 @@ export interface Config {
   model: string;
   /** Working directory */
   workDir: string;
-  /** Convex deployment URL */
-  convexUrl: string;
   /** Whether the key came from encrypted storage */
   keyFromFile: boolean;
   /** Whether running in dev mode */
@@ -65,7 +59,6 @@ export async function loadConfig(): Promise<Config> {
     apiKey,
     model: process.env.DEEPSEEK_MODEL || 'deepseek-v4-pro',
     workDir: process.env.WORK_DIR || process.cwd(),
-    convexUrl: process.env.CONVEX_URL || (isDev ? CONVEX_DEV : CONVEX_PROD),
     keyFromFile,
     isDev,
   };

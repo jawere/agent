@@ -4,12 +4,7 @@ import { SYSTEM_PROMPT } from './system-prompt.js';
 import { TOOL_DEFS, executeTool } from './tools.js';
 import { loadConfig } from './config.js';
 import { createSpinner, Spinner } from './spinner.js';
-import {
-  createSession,
-  appendUserMessage,
-  appendAssistantMessage,
-  appendToolResult,
-} from './convex-client.js';
+
 
 const MAX_TURNS = 500;
 const MAX_OUTPUT_TOKENS = 393_216; // 384K max output tokens (DeepSeek limit)
@@ -101,15 +96,7 @@ function displayToolLine(
   }
 }
 
-// ── Convex helpers ──────────────────────────────────────────────────
 
-async function safeCall<T>(fn: () => Promise<T>, label: string): Promise<T | undefined> {
-  try {
-    return await fn();
-  } catch {
-    return undefined;
-  }
-}
 
 // ── API retry with exponential backoff ─────────────────────────────
 
@@ -261,30 +248,7 @@ export async function runAgent(
     apiKey: config.apiKey,
   });
 
-  const toolNames = TOOL_DEFS.map((t) => t.function.name);
-
-  // Create or resume Convex session (best-effort)
-  let sessionId = options.sessionId || 'local';
-  const hasRealSession = sessionId !== 'local';
-  const isNewSession = !options.sessionId;
-  if (isNewSession) {
-    const created = await safeCall(
-      () =>
-        createSession(
-          config.convexUrl,
-          options.title || userMessage.slice(0, 100),
-          config.model,
-          SYSTEM_PROMPT,
-          toolNames,
-        ),
-      'createSession',
-    );
-    if (created) sessionId = created;
-  }
-
-  if (hasRealSession || sessionId !== 'local') {
-    safeCall(() => appendUserMessage(config.convexUrl, sessionId, userMessage), 'appendUserMessage');
-  }
+  const sessionId = options.sessionId || 'local';
 
   // Build message array: system prompt + existing history + new user message
   const messages: ChatCompletionMessageParam[] = [
@@ -405,24 +369,6 @@ export async function runAgent(
         .sort(([a], [b]) => a - b)
         .map(([_, tc]) => tc);
 
-      const toolCallsMeta = toolCallArray.map((tc) => ({
-        id: tc.id,
-        name: tc.name,
-        arguments: tc.arguments,
-      }));
-
-      safeCall(
-        () =>
-          appendAssistantMessage(
-            config.convexUrl,
-            sessionId,
-            streamedContent || null,
-            toolCallsMeta.length > 0 ? toolCallsMeta : null,
-            streamUsage,
-          ),
-        'appendAssistantMessage',
-      );
-
       // Build tool_calls in OpenAI format for history
       const openaiToolCalls = toolCallArray.map((tc) => ({
         id: tc.id,
@@ -472,19 +418,7 @@ export async function runAgent(
           content: result.content,
         } as unknown as ChatCompletionMessageParam);
 
-        const isError = !ok;
-        safeCall(
-          () =>
-            appendToolResult(
-              config.convexUrl,
-              sessionId,
-              result.tool_call_id,
-              tc.name,
-              result.content,
-              isError,
-            ),
-          'appendToolResult',
-        );
+
       }
 
       // Continue loop to next API call (spinner still running)
@@ -496,10 +430,7 @@ export async function runAgent(
 
     const text = stripThinking(streamedContent) || '(empty response)';
 
-    safeCall(
-      () => appendAssistantMessage(config.convexUrl, sessionId, text, null, streamUsage),
-      'appendAssistantMessage',
-    );
+
 
     // Print a blank line then the final summary
     console.log('');
@@ -511,6 +442,5 @@ export async function runAgent(
   // Max turns reached
   spin.stop();
   const msg = 'Agent reached maximum turns without completing the task.';
-  safeCall(() => appendAssistantMessage(config.convexUrl, sessionId, msg, null), 'appendAssistantMessage');
   return { text: msg, sessionId, history: messages };
 }

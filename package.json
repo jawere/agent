@@ -7,22 +7,15 @@
   },
   "files": [
     "bin",
-    "dist",
-    "convex/_generated"
+    "dist"
   ],
   "scripts": {
     "start": "node --env-file .env.local --import tsx src/index.ts",
     "start:prod": "tsx src/index.ts",
     "build": "node scripts/build.js",
-    "dev": "npx convex dev",
-    "deploy:dev": "npx convex dev --env-file .env.local",
-    "deploy:prod": "npx convex deploy --env-file .env.prod",
-    "seed:dev": "CONVEX_URL=https://dazzling-jackal-33.convex.cloud tsx scripts/seed.ts",
-    "seed:prod": "CONVEX_URL=https://friendly-pigeon-624.convex.cloud tsx scripts/seed.ts",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "convex": "^1.42.1",
     "marked": "^18.0.5",
     "openai": "^4.73.0"
   },

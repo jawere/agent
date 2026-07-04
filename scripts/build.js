@@ -22,7 +22,4 @@ await esbuild.build({
   },
 });
 
-// Copy convex backend into dist (needed at runtime for convex deploy)
-// The convex/ directory is already at the root, no copy needed.
-
 console.log('Build complete.');

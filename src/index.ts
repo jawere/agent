@@ -5,7 +5,7 @@ import type { ChatCompletionMessageParam } from 'openai/resources/chat/completio
 import { runAgent } from './agent.js';
 import { loadConfig, hasApiKey } from './config.js';
 import { saveKey, loadKey, deleteKey, hasKey } from './crypto.js';
-import { listSessions } from './convex-client.js';
+
 import { runScanner } from './scanner.js';
 import { createPrompt } from './prompt.js';
 
@@ -37,8 +37,7 @@ function printHelp() {
   console.log(`
 ${G_GREEN}Commands:${R}
   ${G_GRAY}/help${R}          Show this help
-  ${G_GRAY}/sessions${R}      List recent Convex sessions
-  ${G_GRAY}/load${R} <num>    Resume a session (run /sessions first)
+
   ${G_GRAY}/key${R}           Show API key status
   ${G_GRAY}/setup${R}         Re-enter API key
   ${G_GRAY}/clear${R}         Clear screen & start fresh session
@@ -67,30 +66,6 @@ async function setupKey(): Promise<void> {
 
   await saveKey(key);
   console.log(`API key encrypted and saved to ~/.jawere/key.enc`);
-}
-
-async function showSessions(convexUrl: string): Promise<Map<number, string>> {
-  const map = new Map<number, string>();
-  try {
-    const sessions = await listSessions(convexUrl);
-    if (sessions.length === 0) {
-      console.log('No sessions found.');
-      return map;
-    }
-    console.log(`\nRecent sessions:`);
-    let i = 1;
-    for (const s of sessions) {
-      const date = new Date(s.updatedAt).toLocaleString();
-      const shortId = s._id.slice(0, 10);
-      console.log(`  ${i}. ${shortId}…  ${date}  ${s.title.slice(0, 50)}`);
-      map.set(i, s._id);
-      i++;
-    }
-    console.log(`\nUse /load <number> to resume a session.`);
-  } catch (err: any) {
-    console.log(`Error fetching sessions: ${err.message}`);
-  }
-  return map;
 }
 
 // ── Main ────────────────────────────────────────────────────────────
@@ -143,7 +118,6 @@ async function main(): Promise<void> {
 
   let currentSessionId: string | undefined;
   let conversationHistory: ChatCompletionMessageParam[] = [];
-  let sessionMap = new Map<number, string>();
   let sessionShown = false;
 
   // ── Initialize working memory ─────────────────────────────────
@@ -206,30 +180,6 @@ async function main(): Promise<void> {
       switch (cmd.toLowerCase()) {
         case 'help':
           printHelp();
-          break;
-        case 'sessions':
-          sessionMap = await showSessions(config.convexUrl);
-          break;
-        case 'load':
-          if (arg) {
-            const num = parseInt(arg, 10);
-            if (!isNaN(num) && sessionMap.has(num)) {
-              currentSessionId = sessionMap.get(num);
-              conversationHistory = [];
-              sessionShown = true;
-              console.log(`Resumed session #${num}: ${currentSessionId?.slice(0, 12)}…`);
-            } else if (arg.length > 10) {
-              // Direct ID fallback
-              currentSessionId = arg;
-              conversationHistory = [];
-              sessionShown = true;
-              console.log(`Resumed session: ${arg.slice(0, 12)}…`);
-            } else {
-              console.log(`Session #${arg} not found. Run /sessions first.`);
-            }
-          } else {
-            console.log('Usage: /load <number>  (run /sessions first)');
-          }
           break;
         case 'key': {
           const savedKey = await loadKey();
