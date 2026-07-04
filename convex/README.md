@@ -122,9 +122,9 @@ CONVEX_URL=https://friendly-pigeon-624.convex.cloud npx tsx scripts/seed.ts
 |------|-------------|
 | `convex/schema.ts` | Database schema definition |
 | `convex/sessions.ts` | Session and message CRUD operations |
-| `convex/chat.ts` | Chat-specific logic (reserved for future use) |
-| `convex/http.ts` | HTTP endpoint handlers (reserved for future use) |
-| `convex/tools.ts` | Custom tool definitions CRUD (reserved for future use) |
+| `convex/chat.ts` | Streaming and sync chat endpoints (proxies to DeepSeek) |
+| `convex/http.ts` | HTTP router — registers `/api/chat` and `/api/chat-sync` routes |
+| `convex/tools.ts` | Custom tool definitions — register, list, search, and remove tools |
 | `convex/seed.ts` | Internal mutation to seed built-in tools |
 | `scripts/seed.ts` | CLI script to seed tools via Convex HTTP API |
 | `scripts/build.js` | esbuild bundler for the agent CLI |

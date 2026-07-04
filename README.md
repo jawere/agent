@@ -7,7 +7,7 @@ Terminal-based AI coding assistant powered by DeepSeek. Runs as an interactive R
 - **Autonomous Agent Loop** — Tool-calling loop (up to 500 turns) with seven filesystem tools
 - **Codebase Scanner** — Pre-scans the project on startup, generating `.codebase/tree.yaml` and `.codebase/meta.json` so the LLM has structural context before the first prompt
 - **Interactive REPL** — Multiline input (Shift+Enter), session resumption, and persistent conversation history backed by Convex
-- **Encrypted API Key** — AES-256-GCM encrypted key storage at `~/.ponytail/key.enc`
+- **Encrypted API Key** — AES-256-GCM encrypted key storage at `~/.jawere/key.enc`
 - **Session Persistence** — Full message history, tool calls, and token usage stored in Convex
 - **Dual Environment** — Dev/prod modes with separate Convex deployments
 
@@ -65,7 +65,7 @@ The LLM has access to seven filesystem tools:
 ## Project Structure
 
 ```
-├── bin/ponytail.js            # CLI entry point
+├── bin/jawere.js              # CLI entry point (global install)
 ├── src/
 │   ├── index.ts               # REPL main loop, command handling
 │   ├── agent.ts               # Agent loop: LLM calls + tool execution

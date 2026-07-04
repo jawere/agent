@@ -1,5 +1,5 @@
 import { exec, ExecOptions } from 'child_process';
-import { readFile, writeFile, mkdir, access } from 'fs/promises';
+import { readFile, writeFile, mkdir, access, stat as fsStat } from 'fs/promises';
 import { constants } from 'fs';
 import { resolve, dirname } from 'path';
 
@@ -188,6 +188,26 @@ export const TOOL_DEFS: OpenAITool[] = [
   {
     type: 'function',
     function: {
+      name: 'stat',
+      description:
+        'Get file or directory metadata. Returns size, line count (for text files), ' +
+        'modification time, and whether the file is binary. Use before reading large files ' +
+        'to decide if chunking with offset/limit is needed.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: 'Path to the file or directory (relative or absolute)',
+          },
+        },
+        required: ['path'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'grep',
       description:
         'Search file contents with regex. Returns matching file paths with line numbers and content. ' +
@@ -219,18 +239,28 @@ export const TOOL_DEFS: OpenAITool[] = [
 const MAX_OUTPUT_LINES = 2000;
 const MAX_OUTPUT_BYTES = 50 * 1024; // 50KB
 
-function truncateOutput(text: string): string {
+/** Truncation result with metadata for the agent to continue reading. */
+interface TruncateResult {
+  text: string;
+  totalLines: number;
+  totalBytes: number;
+  linesShown: number;
+  truncated: boolean;
+}
+
+function truncateOutput(text: string): TruncateResult {
   const lines = text.split('\n');
   const byteLen = Buffer.byteLength(text, 'utf-8');
+  const totalLines = lines.length;
+  const totalBytes = byteLen;
 
   if (lines.length <= MAX_OUTPUT_LINES && byteLen <= MAX_OUTPUT_BYTES) {
-    return text;
+    return { text, totalLines, totalBytes, linesShown: totalLines, truncated: false };
   }
 
   let truncated = '';
   if (lines.length > MAX_OUTPUT_LINES) {
     truncated = lines.slice(0, MAX_OUTPUT_LINES).join('\n');
-    truncated += `\n\n[Truncated: ${lines.length - MAX_OUTPUT_LINES} more lines]`;
   } else {
     truncated = text;
   }
@@ -238,10 +268,18 @@ function truncateOutput(text: string): string {
   if (Buffer.byteLength(truncated, 'utf-8') > MAX_OUTPUT_BYTES) {
     const buf = Buffer.from(truncated, 'utf-8');
     truncated = buf.subarray(0, MAX_OUTPUT_BYTES).toString('utf-8');
-    truncated += '\n\n[Truncated: output exceeded 50KB]';
   }
 
-  return truncated;
+  const linesShown = truncated.split('\n').length;
+
+  // Help the agent continue: tell it what to do next
+  truncated += `\n\n[Showing ${linesShown}/${totalLines} lines, ${Buffer.byteLength(truncated, 'utf-8')}/${totalBytes} bytes.`;
+  if (totalLines > linesShown) {
+    truncated += ` Continue with offset=${linesShown + 1}.`;
+  }
+  truncated += ']';
+
+  return { text: truncated, totalLines, totalBytes, linesShown, truncated: true };
 }
 
 async function execBash(command: string, workDir: string, timeoutSec?: number): Promise<string> {
@@ -260,6 +298,7 @@ async function execBash(command: string, workDir: string, timeoutSec?: number): 
         let result = '';
         const outStr = typeof stdout === 'string' ? stdout : stdout?.toString() ?? '';
         const errStr = typeof stderr === 'string' ? stderr : stderr?.toString() ?? '';
+        const exitCode = error ? (error as any).code ?? 1 : 0;
         if (outStr.trim()) result += outStr.trim();
         if (errStr.trim()) {
           if (result) result += '\n';
@@ -268,7 +307,10 @@ async function execBash(command: string, workDir: string, timeoutSec?: number): 
         if (error && !result) {
           result = error.message;
         }
-        resolve(truncateOutput(result) || '(no output)');
+        const truncated = truncateOutput(result || '(no output)');
+        // Append exit code so the agent knows whether the command succeeded
+        const suffix = exitCode !== 0 ? `\n[exit code: ${exitCode}]` : '';
+        resolve(truncated.text + suffix);
       },
     );
   });
@@ -282,27 +324,48 @@ async function readFileTool(
 ): Promise<string> {
   const fullPath = resolve(workDir, path);
 
-  // Safety: ensure path is within workDir or is a reasonable absolute path
   try {
     await access(fullPath, constants.R_OK);
   } catch {
-    return `Error: File not found or not readable: ${fullPath}`;
+    return `Error: [file-not-found] ${fullPath} does not exist or is not readable.`;
   }
 
   const content = await readFile(fullPath, 'utf-8');
-  let lines = content.split('\n');
+  const allLines = content.split('\n');
+  const totalLines = allLines.length;
+  const totalBytes = Buffer.byteLength(content, 'utf-8');
 
   const start = offset ? offset - 1 : 0;
   const end = limit ? start + limit : undefined;
 
-  lines = lines.slice(start, end);
-
-  let result = lines.join('\n');
+  const sliced = allLines.slice(start, end);
+  let result = sliced.join('\n');
   if (result.length === 0 && content.length > 0) {
-    result = content; // fallback for non-newline files
+    result = content;
   }
 
-  return truncateOutput(result);
+  const truncated = truncateOutput(result);
+
+  // Include total file metadata so the agent knows if more is available
+  const range = offset || limit
+    ? ` (offset=${offset ?? 1}, limit=${limit ?? 'none'})`
+    : '';
+  const header = `[${fullPath}: ${totalLines} lines, ${totalBytes} bytes total${range}]\n`;
+
+  return header + truncated.text;
+}
+
+/** Build a compact diff summary: lines changed, chars added/removed. */
+function diffSummary(before: string, after: string): string {
+  const beforeLines = before.split('\n').length;
+  const afterLines = after.split('\n').length;
+  const beforeBytes = Buffer.byteLength(before, 'utf-8');
+  const afterBytes = Buffer.byteLength(after, 'utf-8');
+  const deltaLines = afterLines - beforeLines;
+  const deltaBytes = afterBytes - beforeBytes;
+  const linePart = deltaLines >= 0 ? `+${deltaLines}` : `${deltaLines}`;
+  const bytePart = deltaBytes >= 0 ? `+${deltaBytes}B` : `${deltaBytes}B`;
+  return `(${linePart} lines, ${bytePart})`;
 }
 
 async function editFileTool(
@@ -316,37 +379,39 @@ async function editFileTool(
   try {
     content = await readFile(fullPath, 'utf-8');
   } catch {
-    // If file doesn't exist, create it if we have exactly one "empty" edit
     if (edits.length === 1 && edits[0].oldText === '') {
       await mkdir(dirname(fullPath), { recursive: true });
       await writeFile(fullPath, edits[0].newText, 'utf-8');
-      return `Created new file: ${fullPath}`;
+      return `Created new file: ${fullPath} (${edits[0].newText.split('\n').length} lines, ${Buffer.byteLength(edits[0].newText, 'utf-8')}B)`;
     }
-    return `Error: File not found: ${fullPath}`;
+    return `Error: [file-not-found] ${fullPath} does not exist. Use write to create a new file, or stat to check the path.`;
   }
 
   let modified = content;
   const errors: string[] = [];
+  const diffs: string[] = [];
 
-  for (const edit of edits) {
+  for (let ei = 0; ei < edits.length; ei++) {
+    const edit = edits[ei];
     const { oldText, newText } = edit;
 
     if (oldText === '') {
-      errors.push(`Edit with empty oldText — use write tool for new files`);
+      errors.push(`Edit #${ei + 1}: empty oldText — use write tool for new files`);
       continue;
     }
 
     const count = modified.split(oldText).length - 1;
     if (count === 0) {
-      errors.push(`oldText not found in file: "${oldText.slice(0, 80)}..."`);
+      errors.push(`Edit #${ei + 1}: oldText not found. Try grep to locate it, or read the file to verify exact whitespace.`);
       continue;
     }
     if (count > 1) {
-      errors.push(`oldText matches ${count} times (must be unique): "${oldText.slice(0, 80)}..."`);
+      errors.push(`Edit #${ei + 1}: oldText matches ${count} times — must be unique. Add more surrounding context to disambiguate.`);
       continue;
     }
 
     modified = modified.replace(oldText, newText);
+    diffs.push(`Edit #${ei + 1}: ${diffSummary(oldText, newText)}`);
   }
 
   if (errors.length > 0 && modified === content) {
@@ -355,11 +420,15 @@ async function editFileTool(
 
   await writeFile(fullPath, modified, 'utf-8');
 
-  const result = errors.length > 0
-    ? `File edited with warnings:\n${errors.map((e) => `  - ${e}`).join('\n')}`
-    : `File edited successfully: ${fullPath}`;
+  const parts: string[] = [];
+  parts.push(`Edited: ${fullPath}`);
+  if (diffs.length > 0) parts.push(`  ${diffs.join('\n  ')}`);
+  if (errors.length > 0) {
+    parts.push(`Warnings:`);
+    parts.push(...errors.map((e) => `  - ${e}`));
+  }
 
-  return result;
+  return parts.join('\n');
 }
 
 async function writeFileTool(path: string, content: string, workDir: string): Promise<string> {
@@ -409,7 +478,7 @@ async function lsTool(path: string | undefined, workDir: string): Promise<string
       return `${e.name}${type}${sizeStr}`;
     });
 
-    return truncateOutput(`${dir}:\n${lines.join('\n')}`);
+    return truncateOutput(`${dir}:\n${lines.join('\n')}`).text;
   } catch (err: any) {
     return `Error listing ${dir}: ${err.message}`;
   }
@@ -480,7 +549,7 @@ async function findTool(
   if (results.length === 0) return `No files matching "${pattern}" found.`;
   return truncateOutput(
     `Found ${results.length} file${results.length !== 1 ? 's' : ''} matching "${pattern}":\n${results.join('\n')}`,
-  );
+  ).text;
 }
 
 async function grepTool(
@@ -577,7 +646,59 @@ async function grepTool(
   if (results.length === 0) return `No matches for "${pattern}" found.`;
   return truncateOutput(
     `${results.length} match${results.length !== 1 ? 'es' : ''} for "${pattern}":\n${results.join('\n')}`,
-  );
+  ).text;
+}
+
+// ── Stat tool ───────────────────────────────────────────────────────
+
+async function statTool(path: string, workDir: string): Promise<string> {
+  const fullPath = resolve(workDir, path);
+  try {
+    const s = await fsStat(fullPath);
+    const parts: string[] = [`${fullPath}:`];
+    if (s.isDirectory()) {
+      parts.push(`  type: directory`);
+      parts.push(`  modified: ${s.mtime.toISOString()}`);
+      return parts.join('\n');
+    }
+    if (s.isFile()) {
+      const sizeBytes = s.size;
+      const sizeStr = sizeBytes >= 1024 * 1024
+        ? `${(sizeBytes / (1024 * 1024)).toFixed(1)}MB`
+        : sizeBytes >= 1024
+          ? `${(sizeBytes / 1024).toFixed(1)}KB`
+          : `${sizeBytes}B`;
+      parts.push(`  size: ${sizeBytes} (${sizeStr})`);
+      parts.push(`  modified: ${s.mtime.toISOString()}`);
+      // Try to count lines for text files
+      try {
+        const content = await readFile(fullPath, 'utf-8');
+        // Check binary heuristic
+        const sample = content.slice(0, 4096);
+        if (sample.includes('\x00')) {
+          parts.push(`  binary: yes`);
+        } else {
+          const lineCount = content.split('\n').length;
+          parts.push(`  lines: ${lineCount}`);
+          parts.push(`  binary: no`);
+          // Hint for read tool
+          if (lineCount > 2000 || sizeBytes > 50 * 1024) {
+            parts.push(`  hint: large file — use read with offset/limit to chunk`);
+          }
+        }
+      } catch {
+        parts.push(`  binary: yes (unreadable as text)`);
+      }
+      return parts.join('\n');
+    }
+    parts.push(`  type: other`);
+    return parts.join('\n');
+  } catch (err: any) {
+    if (err.code === 'ENOENT') {
+      return `[not-found] ${fullPath} does not exist.`;
+    }
+    return `Error: [stat-failed] ${fullPath}: ${err.message}`;
+  }
 }
 
 // ── Tool dispatcher ─────────────────────────────────────────────────
@@ -636,6 +757,9 @@ export async function executeTool(
           args.include as string | undefined,
           workDir,
         );
+        break;
+      case 'stat':
+        result = await statTool(args.path as string, workDir);
         break;
       default:
         result = `Error: Unknown tool: ${fn.name}`;

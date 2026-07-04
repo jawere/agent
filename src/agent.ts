@@ -28,7 +28,7 @@ const GRUVBOX_AQUA = '\x1b[38;2;142;192;124m';   // aqua #8ec07c
 const RESET = '\x1b[0m';
 
 /** File-oriented tools get green; bash/grep/find get grey */
-const FILE_TOOLS = new Set(['read', 'write', 'edit']);
+const FILE_TOOLS = new Set(['read', 'write', 'edit', 'stat']);
 
 /** Build a compact tool detail string from args */
 function toolDetail(name: string, args: Record<string, unknown>): string {

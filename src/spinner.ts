@@ -14,6 +14,48 @@
 // Spinner frames — classic braille dots
 const FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
+// Fun verb list — one random word shown each frame tick
+const WORDS = [
+  'Accomplishing', 'Actioning', 'Actualizing', 'Architecting', 'Baking',
+  'Beaming', 'Beboppin\'', 'Befuddling', 'Billowing', 'Blanching',
+  'Bloviating', 'Boogieing', 'Boondoggling', 'Booping', 'Bootstrapping',
+  'Brewing', 'Burrowing', 'Calculating', 'Canoodling', 'Caramelizing',
+  'Cascading', 'Catapulting', 'Cerebrating', 'Channeling', 'Channelling',
+  'Choreographing', 'Churning', 'Clauding', 'Coalescing', 'Cogitating',
+  'Combobulating', 'Composing', 'Computing', 'Concocting', 'Considering',
+  'Contemplating', 'Cooking', 'Crafting', 'Creating', 'Crunching',
+  'Crystallizing', 'Cultivating', 'Deciphering', 'Deliberating',
+  'Determining', 'Dilly-dallying', 'Discombobulating', 'Doing', 'Doodling',
+  'Drizzling', 'Ebbing', 'Effecting', 'Elucidating', 'Embellishing',
+  'Enchanting', 'Envisioning', 'Evaporating', 'Fermenting',
+  'Fiddle-faddling', 'Finagling', 'Flambeing', 'Flibbertigibbeting',
+  'Flowing', 'Flummoxing', 'Fluttering', 'Forging', 'Forming', 'Frolicking',
+  'Frosting', 'Gallivanting', 'Galloping', 'Garnishing', 'Generating',
+  'Germinating', 'Gitifying', 'Grooving', 'Gusting', 'Harmonizing',
+  'Hashing', 'Hatching', 'Herding', 'Honking', 'Hullaballooing',
+  'Hyperspacing', 'Ideating', 'Imagining', 'Improvising', 'Incubating',
+  'Inferring', 'Infusing', 'Ionizing', 'Jitterbugging', 'Julienning',
+  'Kneading', 'Leavening', 'Levitating', 'Lollygagging', 'Manifesting',
+  'Marinating', 'Meandering', 'Metamorphosing', 'Misting', 'Moonwalking',
+  'Moseying', 'Mulling', 'Mustering', 'Musing', 'Nebulizing', 'Nesting',
+  'Newspapering', 'Noodling', 'Nucleating', 'Orbiting', 'Orchestrating',
+  'Osmosing', 'Perambulating', 'Percolating', 'Perusing', 'Philosophising',
+  'Photosynthesizing', 'Pollinating', 'Pondering', 'Pontificating',
+  'Pouncing', 'Precipitating', 'Prestidigitating', 'Processing', 'Proofing',
+  'Propagating', 'Puttering', 'Puzzling', 'Quantumizing',
+  'Razzle-dazzling', 'Razzmatazzing', 'Recombobulating', 'Reticulating',
+  'Roosting', 'Ruminating', 'Sauteing', 'Scampering', 'Schlepping',
+  'Scurrying', 'Seasoning', 'Shenaniganing', 'Shimmying', 'Simmering',
+  'Skedaddling', 'Sketching', 'Slithering', 'Smooshing', 'Sock-hopping',
+  'Spelunking', 'Spinning', 'Sprouting', 'Stewing', 'Sublimating',
+  'Swirling', 'Swooping', 'Symbioting', 'Synthesizing', 'Tempering',
+  'Thinking', 'Thundering', 'Tinkering', 'Tomfoolering', 'Topsy-turvying',
+  'Transfiguring', 'Transmuting', 'Twisting', 'Undulating', 'Unfurling',
+  'Unravelling', 'Vibing', 'Waddling', 'Wandering', 'Warping',
+  'Whatchamacalliting', 'Whirlpooling', 'Whirring', 'Whisking', 'Wibbling',
+  'Working', 'Wrangling', 'Zesting', 'Zigzagging',
+];
+
 // Gruvbox colors
 const GRAY = '\x1b[38;2;146;131;116m';
 const GREEN = '\x1b[38;2;184;187;3m';
@@ -41,9 +83,14 @@ export function createSpinner(): Spinner {
   // We use this to overwrite the line cleanly.
   let lastLineLen = 0;
 
+  function pickWord(): string {
+    return WORDS[Math.floor(Math.random() * WORDS.length)];
+  }
+
   function draw(message: string): void {
     const frame = FRAMES[frameIdx % FRAMES.length];
-    const line = `  ${GREEN}${frame}${RESET} ${GRAY}${message}${RESET}`;
+    const word = pickWord();
+    const line = `  ${GREEN}${frame}${RESET} ${GRAY}${word}…${RESET}`;
 
     // Clear the previous line first with \r and spaces, then write new line
     const clear = ' '.repeat(Math.max(0, lastLineLen));
@@ -81,9 +128,9 @@ export function createSpinner(): Spinner {
       }, FRAME_INTERVAL);
     },
 
-    update(message: string) {
-      currentMessage = message;
-      // Next frame tick will pick up the new message
+    update(_message: string) {
+      // Force an immediate redraw with a new random word
+      draw('');
     },
 
     stop(finalMessage?: string) {

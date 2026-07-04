@@ -21,7 +21,7 @@ tree:
     - README.md:
         type: docs
         desc: "Project documentation and README."
-        size: 3946
+        size: 3961
     - tsconfig.json:
         type: config
         desc: "TypeScript compiler configuration."
@@ -43,7 +43,7 @@ tree:
     - README.md:
         type: docs
         desc: "Project documentation and README."
-        size: 4927
+        size: 4968
     - tsconfig.json:
         type: config
         desc: "TypeScript compiler configuration."
@@ -137,7 +137,7 @@ tree:
     - prompt.ts:
         type: other
         desc: "System prompt definition for the agent."
-        size: 8002
+        size: 13672
     - scanner.ts:
         type: other
         desc: "Background codebase scanner — generates tree.yaml cache."
@@ -145,7 +145,7 @@ tree:
     - spinner.ts:
         type: other
         desc: "Exports: Spinner, createSpinner."
-        size: 3040
+        size: 5897
     - system-prompt.ts:
         type: other
         desc: "System prompt definition for the agent."
@@ -312,7 +312,7 @@ summaries:
     description: |
       Main entry point and REPL loop.
   "src/prompt.ts":
-    lines: 263
+    lines: 363
     exports: ["createPrompt"]
     key_functions: ["simplePrompt", "multilinePrompt", "createPrompt"]
     description: |
@@ -324,7 +324,7 @@ summaries:
     description: |
       Background codebase scanner — generates tree.yaml cache.
   "src/spinner.ts":
-    lines: 110
+    lines: 157
     exports: ["Spinner", "createSpinner"]
     key_functions: ["createSpinner"]
     description: |
