@@ -131,7 +131,7 @@ async function main(): Promise<void> {
     if (scanResult.cached) {
       process.stderr.write(` ${G_GRAY}(cached, ${scanResult.fileCount} files)${R}\n`);
     } else {
-      process.stderr.write(` ${G_GREEN}done${R} ${G_GRAY}(${scanResult.fileCount} files)${R}\n`);
+      process.stderr.write(` ${G_GRAY}(${scanResult.fileCount} files)${R}\n`);
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
