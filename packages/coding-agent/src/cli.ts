@@ -60,6 +60,7 @@ ${G_GREEN}Commands:${R}
 
 ${G_GREEN}CLI flags:${R}
   ${G_FG}--setup${R}        Run setup wizard (provider, key, model)
+  ${G_FG}--update${R}       Quick update: pull, install, build, push as fix
 `);
 }
 
@@ -195,13 +196,60 @@ async function setupKey(): Promise<void> {
 
 // ── Main ────────────────────────────────────────────────────────────
 
+async function quickUpdate(): Promise<void> {
+  const { execSync } = await import("child_process");
+
+  console.log(`${G_GREEN}╔══════════════════════════════════════════╗${R}`);
+  console.log(`${G_GREEN}║   jawere — Quick Update                  ║${R}`);
+  console.log(`${G_GREEN}╚══════════════════════════════════════════╝${R}\n`);
+
+  // Detect if installed globally
+  let isGlobal = false;
+  try {
+    execSync("npm list -g @jawere/coding-agent", { encoding: "utf-8", stdio: "pipe" });
+    isGlobal = true;
+  } catch {}
+
+  const installCmd = isGlobal
+    ? "npm install -g @jawere/coding-agent@latest"
+    : "npm install @jawere/coding-agent@latest";
+
+  console.log(`${G_GRAY}── Updating @jawere/coding-agent to latest ──${R}`);
+  console.log(`${G_DIM}→ ${installCmd}${R}`);
+
+  try {
+    const out = execSync(installCmd, { encoding: "utf-8", stdio: "pipe" });
+    if (out.trim()) console.log(out.trim());
+  } catch (e: any) {
+    console.error(`${G_GREEN2}✗${R} ${e.stderr || e.message}`);
+    process.exit(1);
+  }
+
+  // Print new version
+  try {
+    const ver = execSync("jawere --version 2>/dev/null || npx jawere --version 2>/dev/null", {
+      encoding: "utf-8",
+      stdio: "pipe",
+    }).trim();
+    console.log(`\n${G_GREEN}✓ Updated to ${ver || "latest"}${R}`);
+  } catch {
+    console.log(`\n${G_GREEN}✓ Update complete!${R}`);
+  }
+}
+
 async function main(): Promise<void> {
   const setupMode = process.argv.includes("--setup");
+  const updateMode = process.argv.includes("--update");
   const config = await loadConfig();
 
   if (setupMode) {
     await setupKey();
     console.log("Setup complete. Run again without --setup to start.");
+    process.exit(0);
+  }
+
+  if (updateMode) {
+    await quickUpdate();
     process.exit(0);
   }
 
