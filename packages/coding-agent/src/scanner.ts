@@ -25,6 +25,7 @@ const CHECKSUMS_FILE = '.codebase/checksums.json';
 // Files/dirs to skip entirely
 const SKIP_DIRS = new Set([
   'node_modules', '.git', 'dist', '.codebase',
+  '.logic',
   '__pycache__', '.cache', '.next', '.turbo',
 ]);
 

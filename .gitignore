@@ -12,3 +12,6 @@ DESIGN.md
 .publish.log
 .repo/
 AGENT_ISSUES.md
+
+# Agent logic traces (large, session-specific)
+.logic/
