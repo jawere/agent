@@ -1,10 +1,12 @@
 import * as esbuild from "esbuild";
+import { copyFile, mkdir } from "fs/promises";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
-const outDir = resolve(root, "packages/coding-agent/dist");
+const pkgDir = resolve(root, "packages/coding-agent");
+const outDir = resolve(pkgDir, "dist");
 
 const externals = [
   "openai",
@@ -42,5 +44,10 @@ await esbuild.build({
   sourcemap: false,
   minify: false,
 });
+
+// Copy README and LICENSE into dist so they're included in the npm package
+await mkdir(outDir, { recursive: true });
+await copyFile(resolve(root, "README.md"), resolve(outDir, "README.md"));
+await copyFile(resolve(root, "LICENSE"), resolve(outDir, "LICENSE"));
 
 console.log("Build complete → packages/coding-agent/dist/");
