@@ -9,6 +9,7 @@
     "clean": "npm run clean --workspaces",
     "build": "npm run build --workspaces",
     "check": "npx tsc --noEmit",
+    "setup": "tsx packages/coding-agent/src/cli.ts --setup",
     "start": "node --env-file .env.local --import tsx packages/coding-agent/src/cli.ts",
     "start:prod": "tsx packages/coding-agent/src/cli.ts",
     "test": "npm run test --workspaces --if-present",
