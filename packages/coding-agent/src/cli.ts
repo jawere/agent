@@ -16,7 +16,7 @@ import { SessionManager } from "./session/manager.js";
 import type { JsonlSessionMetadata } from "./session/types.js";
 import { Session } from "./session/session.js";
 import { runScanner } from "./scanner.js";
-import { createPrompt } from "@jawere/tui";
+import { createPrompt, loadFileList } from "@jawere/tui";
 import { SYSTEM_PROMPT } from "./system-prompt.js";
 
 // Gruvbox dark palette
@@ -276,7 +276,9 @@ async function main(): Promise<void> {
     // best effort
   }
 
-  const { prompt, enableBracketedPaste, disableBracketedPaste } = createPrompt();
+  const { prompt, enableBracketedPaste, disableBracketedPaste } = createPrompt({
+    getFiles: () => loadFileList(config.workDir),
+  });
   enableBracketedPaste();
 
   let runningAbort: AbortController | null = null;

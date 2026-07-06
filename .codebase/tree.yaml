@@ -21,11 +21,11 @@ tree:
     - package.json:
         type: config
         desc: "NPM package manifest — scripts, dependencies, metadata."
-        size: 810
+        size: 1016
     - README.md:
         type: docs
         desc: "Project documentation and README."
-        size: 6700
+        size: 10236
     - SECURITY.md:
         type: docs
         desc: "Documentation file."
@@ -47,7 +47,7 @@ tree:
     - package.json:
         type: config
         desc: "NPM package manifest — scripts, dependencies, metadata."
-        size: 702
+        size: 735
     - tsconfig.build.json:
         type: config
         desc: "Configuration loading and management."
@@ -65,6 +65,10 @@ tree:
         type: other
         desc: "Main entry point and REPL loop."
         size: 446
+    - proxy.test.ts:
+        type: test
+        desc: "Test file."
+        size: 1685
     - proxy.ts:
         type: other
         desc: "Exports: ProxyAssistantMessageEvent, ProxyStreamOptions, streamProxy."
@@ -77,12 +81,16 @@ tree:
     - package.json:
         type: config
         desc: "NPM package manifest — scripts, dependencies, metadata."
-        size: 992
+        size: 1025
     - tsconfig.build.json:
         type: config
         desc: "Configuration loading and management."
         size: 188
   packages/ai/src/:
+    - api-keys.test.ts:
+        type: test
+        desc: "Test file."
+        size: 5599
     - api-keys.ts:
         type: other
         desc: "Exports: KeySource, ResolvedKey, KeyResolverOptions, KeyResolver, getDefaultKeyResolver."
@@ -91,6 +99,10 @@ tree:
         type: other
         desc: "Exports: streamSimple, completeSimple, oneShot, chat."
         size: 3572
+    - event-stream.test.ts:
+        type: test
+        desc: "Test file."
+        size: 5194
     - event-stream.ts:
         type: other
         desc: "Exports: EventStream, createAssistantEventStream."
@@ -99,6 +111,10 @@ tree:
         type: other
         desc: "Main entry point and REPL loop."
         size: 1359
+    - models.test.ts:
+        type: test
+        desc: "Test file."
+        size: 7806
     - models.ts:
         type: other
         desc: "Exports: ModelRegistry, getModelRegistry, setModelRegistry."
@@ -107,6 +123,10 @@ tree:
         type: other
         desc: "Exports: TextContent, ImageContent, ToolCallContent, ToolResultContent, ContentBlock, …."
         size: 6862
+    - utils.test.ts:
+        type: test
+        desc: "Test file."
+        size: 6449
     - utils.ts:
         type: other
         desc: "Exports: estimateTokens, estimateContextTokens, getLastAssistantUsage, RetryOptions, withRetry, …."
@@ -160,7 +180,7 @@ tree:
     - package.json:
         type: config
         desc: "NPM package manifest — scripts, dependencies, metadata."
-        size: 1020
+        size: 1051
     - tsconfig.build.json:
         type: config
         desc: "Configuration loading and management."
@@ -169,7 +189,7 @@ tree:
     - agent-runner.ts:
         type: other
         desc: "Agent loop — API calls, tool execution, spinner, retry logic."
-        size: 9856
+        size: 10520
     - agent-tools.ts:
         type: other
         desc: "Agent loop — API calls, tool execution, spinner, retry logic."
@@ -177,19 +197,27 @@ tree:
     - cli.ts:
         type: other
         desc: "TypeScript source file."
-        size: 13352
+        size: 14429
     - config.ts:
         type: other
         desc: "Configuration loading and management."
-        size: 3239
+        size: 3885
+    - crypto.test.ts:
+        type: test
+        desc: "Encryption/decryption utilities."
+        size: 3091
     - crypto.ts:
         type: other
         desc: "Encryption/decryption utilities."
-        size: 4771
+        size: 4904
+    - db.test.ts:
+        type: test
+        desc: "Test file."
+        size: 6634
     - db.ts:
         type: other
         desc: "Exports: SessionRow, MessageRow, initDb, closeDb, createSession, …."
-        size: 7378
+        size: 7219
     - index.ts:
         type: other
         desc: "Main entry point and REPL loop."
@@ -235,7 +263,7 @@ tree:
     - package.json:
         type: config
         desc: "NPM package manifest — scripts, dependencies, metadata."
-        size: 743
+        size: 776
     - tsconfig.build.json:
         type: config
         desc: "Configuration loading and management."
@@ -249,6 +277,10 @@ tree:
         type: other
         desc: "Exports: RpcProcessOptions, RpcProcess."
         size: 3104
+    - supervisor.test.ts:
+        type: test
+        desc: "Test file."
+        size: 4737
     - supervisor.ts:
         type: other
         desc: "Exports: Supervisor."
@@ -261,12 +293,16 @@ tree:
     - package.json:
         type: config
         desc: "NPM package manifest — scripts, dependencies, metadata."
-        size: 652
+        size: 685
     - tsconfig.build.json:
         type: config
         desc: "Configuration loading and management."
         size: 188
   packages/tui/src/:
+    - display.test.ts:
+        type: test
+        desc: "Test file."
+        size: 6038
     - display.ts:
         type: other
         desc: "Exports: ToolLineOptions, formatToolStart, formatToolEnd, DisplayState, createDisplayState, …."
@@ -4191,7 +4227,10 @@ tree:
     - build.js:
         type: other
         desc: "Build/bundler script."
-        size: 1154
+        size: 1499
+    - pre-commit:
+        type: other
+        size: 227
     - setup.js:
         type: other
         desc: "JavaScript module."
@@ -4206,7 +4245,7 @@ summaries:
     description: |
       Documentation file.
   "README.md":
-    lines: 140
+    lines: 253
     exports: []
     description: |
       Project documentation and README.
@@ -4221,7 +4260,7 @@ summaries:
     description: |
       JavaScript module.
   "package.json":
-    lines: 29
+    lines: 31
     exports: []
     description: |
       NPM package manifest — scripts, dependencies, metadata.
@@ -4250,6 +4289,12 @@ summaries:
     depends_on: ["./agent.ts", "./agent.ts", "./agent-loop.ts", "./proxy.ts", "./proxy.ts", "./types.ts"]
     description: |
       Main entry point and REPL loop.
+  "packages/agent/src/proxy.test.ts":
+    lines: 56
+    exports: []
+    depends_on: ["./proxy.ts", "./proxy.ts"]
+    description: |
+      Test file.
   "packages/agent/src/proxy.ts":
     lines: 298
     exports: ["ProxyAssistantMessageEvent", "ProxyStreamOptions", "streamProxy"]
@@ -4271,6 +4316,12 @@ summaries:
     exports: []
     description: |
       NPM package manifest — scripts, dependencies, metadata.
+  "packages/ai/src/api-keys.test.ts":
+    lines: 161
+    exports: []
+    depends_on: ["./api-keys.ts"]
+    description: |
+      Test file.
   "packages/ai/src/api-keys.ts":
     lines: 189
     exports: ["KeySource", "ResolvedKey", "KeyResolverOptions", "KeyResolver", "getDefaultKeyResolver"]
@@ -4284,6 +4335,12 @@ summaries:
     depends_on: ["./types.ts", "./event-stream.ts", "./types.ts"]
     description: |
       Exports: streamSimple, completeSimple, oneShot, chat.
+  "packages/ai/src/event-stream.test.ts":
+    lines: 195
+    exports: []
+    depends_on: ["./event-stream.ts", "./types.ts"]
+    description: |
+      Test file.
   "packages/ai/src/event-stream.ts":
     lines: 81
     exports: ["EventStream", "createAssistantEventStream"]
@@ -4297,6 +4354,13 @@ summaries:
     depends_on: ["./types.ts", "./event-stream.ts", "./utils.ts", "./api-keys.ts", "./complete.ts", "./models.ts", "./providers/openai.ts", "./providers/deepseek.ts", "./providers/anthropic.ts", "./providers/google.ts", "./providers/azure.ts", "./providers/bedrock.ts", "./providers/mistral.ts", "./providers/github-copilot.ts", "./providers/openrouter.ts", "./providers/cloudflare.ts", "./providers/openai-compatible.ts", "./providers/openai-compatible.ts", "./providers/cloudflare.ts", "./providers/github-copilot.ts"]
     description: |
       Main entry point and REPL loop.
+  "packages/ai/src/models.test.ts":
+    lines: 240
+    exports: []
+    key_functions: ["makeModel", "makeProvider"]
+    depends_on: ["./models.ts", "./types.ts"]
+    description: |
+      Test file.
   "packages/ai/src/models.ts":
     lines: 146
     exports: ["ModelRegistry", "getModelRegistry", "setModelRegistry"]
@@ -4386,6 +4450,12 @@ summaries:
     exports: ["TextContent", "ImageContent", "ToolCallContent", "ToolResultContent", "ContentBlock", "UserMessage", "AssistantMessage", "ToolResultMessage", "Message", "Context", "ToolDef", "KnownApi", "Api", "KnownProvider", "ProviderId", "ThinkingLevel", "ModelThinkingLevel", "ThinkingBudgets", "CostInfo", "Usage", "Model", "AssistantMessageEvent", "AssistantMessageEventStream", "Transport", "SimpleStreamOptions", "ProviderHeaders", "ApiKeyAuth", "OAuthAuth", "ProviderAuth", "Provider", "Models"]
     description: |
       Exports: TextContent, ImageContent, ToolCallContent, ToolResultContent, ContentBlock, ….
+  "packages/ai/src/utils.test.ts":
+    lines: 210
+    exports: []
+    depends_on: ["./utils.ts"]
+    description: |
+      Test file.
   "packages/ai/src/utils.ts":
     lines: 120
     exports: ["estimateTokens", "estimateContextTokens", "getLastAssistantUsage", "RetryOptions", "withRetry", "truncateOutput"]
@@ -4404,7 +4474,7 @@ summaries:
     description: |
       NPM package manifest — scripts, dependencies, metadata.
   "packages/coding-agent/src/agent-runner.ts":
-    lines: 300
+    lines: 330
     exports: ["RunAgentOptions", "RunAgentResult", "runAgent"]
     key_functions: ["buildModel", "createProvider", "createDisplaySubscriber", "legacyHistoryToAgentMessages", "agentMessagesToLegacyHistory", "runAgent"]
     depends_on: ["./agent-tools.js", "./system-prompt.js", "./config.js"]
@@ -4418,27 +4488,38 @@ summaries:
     description: |
       Agent loop — API calls, tool execution, spinner, retry logic.
   "packages/coding-agent/src/cli.ts":
-    lines: 417
+    lines: 457
     exports: []
     key_functions: ["center", "printBanner", "printHelp", "formatTime", "setupKey", "main"]
     depends_on: ["./config.js", "./crypto.js", "./session/manager.js", "./session/types.js", "./session/session.js", "./scanner.js", "./system-prompt.js"]
     description: |
       TypeScript source file.
   "packages/coding-agent/src/config.ts":
-    lines: 112
+    lines: 118
     exports: ["Config", "loadConfig", "hasApiKey"]
     key_functions: ["isDevMode", "loadConfig", "hasApiKey"]
     depends_on: ["./crypto.js"]
     description: |
       Configuration loading and management.
+  "packages/coding-agent/src/crypto.test.ts":
+    lines: 97
+    exports: []
+    depends_on: ["./crypto.ts"]
+    description: |
+      Encryption/decryption utilities.
   "packages/coding-agent/src/crypto.ts":
-    lines: 135
-    exports: ["encrypt", "decrypt", "SavedConfig", "saveConfig", "loadSavedConfig", "saveKey", "loadKey", "hasKey", "deleteKey"]
+    lines: 146
+    exports: ["encrypt", "decrypt", "SavedProvider", "SavedConfig", "saveConfig", "loadSavedConfig", "saveKey", "loadKey", "hasKey", "deleteKey"]
     key_functions: ["loadOrCreatePepper", "deriveKey", "encrypt", "decrypt", "saveConfig", "loadSavedConfig", "saveKey", "loadKey", "hasKey", "deleteKey"]
     description: |
       Encryption/decryption utilities.
+  "packages/coding-agent/src/db.test.ts":
+    lines: 209
+    exports: []
+    description: |
+      Test file.
   "packages/coding-agent/src/db.ts":
-    lines: 246
+    lines: 244
     exports: ["SessionRow", "MessageRow", "initDb", "closeDb", "createSession", "listSessions", "getSessionMessages", "deleteSession", "persistMessages", "replaceSessionMessages"]
     key_functions: ["getStorePath", "loadStore", "saveStore", "initDb", "closeDb", "createSession", "listSessions", "getSessionMessages", "deleteSession", "serializeMessage", "persistMessages", "replaceSessionMessages"]
     description: |
@@ -4526,6 +4607,12 @@ summaries:
     depends_on: ["./types.ts"]
     description: |
       Exports: RpcProcessOptions, RpcProcess.
+  "packages/orchestrator/src/supervisor.test.ts":
+    lines: 158
+    exports: []
+    depends_on: ["./supervisor.ts"]
+    description: |
+      Test file.
   "packages/orchestrator/src/supervisor.ts":
     lines: 157
     exports: ["Supervisor"]
@@ -4547,6 +4634,13 @@ summaries:
     exports: []
     description: |
       NPM package manifest — scripts, dependencies, metadata.
+  "packages/tui/src/display.test.ts":
+    lines: 176
+    exports: []
+    key_functions: ["plain"]
+    depends_on: ["./display.ts"]
+    description: |
+      Test file.
   "packages/tui/src/display.ts":
     lines: 244
     exports: ["ToolLineOptions", "formatToolStart", "formatToolEnd", "DisplayState", "createDisplayState", "writeToolLine", "writeAssistantResponse", "stripThinking"]
@@ -10342,7 +10436,7 @@ summaries:
     description: |
       TypeScript compiler configuration.
   "scripts/build.js":
-    lines: 47
+    lines: 54
     exports: []
     description: |
       Build/bundler script.

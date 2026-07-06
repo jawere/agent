@@ -1,9 +1,17 @@
-// @jawere/tui — Multiline terminal prompt with paste support
+// @jawere/tui — Multiline terminal prompt with paste support and @-tag autocomplete
 
 import * as readline from "readline";
+import {
+  createTagState,
+  matchFiles,
+  renderDropdown,
+  type TagState,
+} from "./tag-autocomplete.ts";
 
 // Colors
 const G_GRAY = "\x1b[38;2;146;131;116m";
+const G_GREEN = "\x1b[38;2;184;187;38m";
+const G_DIM   = "\x1b[38;2;102;92;84m";
 const R = "\x1b[0m";
 const PROMPT_STR = `${G_GRAY}>${R} `;
 const CONT = "  ";
@@ -26,7 +34,7 @@ function simplePrompt(): Promise<string> {
   });
 }
 
-function multilinePrompt(): Promise<string> {
+function multilinePrompt(getFiles?: () => string[]): Promise<string> {
   return new Promise((resolve) => {
     const lines: string[] = [""];
     let row = 0;
@@ -36,6 +44,9 @@ function multilinePrompt(): Promise<string> {
     let pasteBuf = "";
     const storedPastes: string[] = [];
     let pasteCounter = 0;
+
+    // @-tag autocomplete state
+    const tag: TagState = createTagState(getFiles?.() ?? []);
 
     process.stdout.write("\n");
     process.stdout.write(PROMPT_STR);
@@ -54,17 +65,61 @@ function multilinePrompt(): Promise<string> {
     rawOn();
 
     const redraw = () => {
+      // Clear dropdown first
+      if (tag.dropdownLines > 0) {
+        process.stdout.write(`\x1b[${tag.dropdownLines}A\r\x1b[0J`);
+        tag.dropdownLines = 0;
+      }
       process.stdout.write(`\x1b[${row}A\r`);
       process.stdout.write("\x1b[0J");
       process.stdout.write(PROMPT_STR + lines[0]);
       for (let i = 1; i < lines.length; i++) {
         process.stdout.write("\r\n" + CONT + lines[i]);
       }
-      const moveUp = lines.length - 1 - row;
+      // Render dropdown if active
+      if (tag.active && tag.matches.length > 0) {
+        const dropdown = renderDropdown(
+          tag.matches,
+          tag.selectedIndex,
+          process.stdout.columns || 80,
+        );
+        if (dropdown) {
+          process.stdout.write(dropdown);
+          tag.dropdownLines = dropdown.split("\n").length - 1;
+        }
+      }
+      // Move cursor back to line position
+      const totalExtra = tag.dropdownLines;
+      const moveUp = lines.length - 1 - row + totalExtra;
       if (moveUp > 0) process.stdout.write(`\x1b[${moveUp}A`);
       process.stdout.write("\r");
       const prefixLen = row === 0 ? PROMPT_STR.length : CONT.length;
       if (col > 0) process.stdout.write(`\x1b[${prefixLen + col}C`);
+    };
+
+    const updateTagMatches = () => {
+      if (!tag.active) return;
+      tag.matches = matchFiles(tag.query, tag.files);
+      tag.selectedIndex = tag.matches.length === 1 ? 0 : -1;
+    };
+
+    const deactivateTag = () => {
+      tag.active = false;
+      tag.query = "";
+      tag.matches = [];
+      tag.selectedIndex = -1;
+    };
+
+    const applyCompletion = (completion: string) => {
+      // Replace @query with the completed filename
+      const line = lines[tag.atRow];
+      const before = line.slice(0, tag.atCol);
+      const after = line.slice(tag.atCol + 1 + tag.query.length);
+      lines[tag.atRow] = before + "@" + completion + after;
+      col = tag.atCol + 1 + completion.length;
+      row = tag.atRow;
+      deactivateTag();
+      redraw();
     };
 
     const cleanup = () => {
@@ -165,6 +220,12 @@ function multilinePrompt(): Promise<string> {
 
       // Enter
       if (s === "\r" || s === "\n") {
+        deactivateTag();
+        // Clear dropdown and everything below cursor
+        if (tag.dropdownLines > 0) {
+          process.stdout.write(`\x1b[0J`);
+          tag.dropdownLines = 0;
+        }
         cleanup();
         process.stdout.write("\r\n");
         const raw = lines.join("\n");
@@ -204,11 +265,40 @@ function multilinePrompt(): Promise<string> {
           redraw();
         } else if (col > 0) {
           const line = lines[row];
+          // If backspacing past the @ sign, deactivate tag mode
+          if (tag.active && row === tag.atRow && col <= tag.atCol + 1) {
+            deactivateTag();
+          }
           lines[row] = line.slice(0, col - 1) + line.slice(col);
           col--;
+          // Update tag query if we removed a query character
+          if (tag.active && row === tag.atRow && col > tag.atCol) {
+            tag.query = lines[row].slice(tag.atCol + 1, col);
+            updateTagMatches();
+          }
           process.stdout.write("\b \b");
-          if (col < lines[row].length) redraw();
+          if (col < lines[row].length || tag.dropdownLines > 0) redraw();
         }
+        return;
+      }
+
+      // Tab
+      if (s === "\t") {
+        if (tag.active && tag.matches.length > 0) {
+          // Cycle through matches
+          if (tag.matches.length === 1) {
+            applyCompletion(tag.matches[0]);
+          } else {
+            tag.selectedIndex = (tag.selectedIndex + 1) % tag.matches.length;
+            redraw();
+          }
+          return;
+        }
+        // Not in tag mode — insert 2 spaces
+        const before = lines[row];
+        lines[row] = before.slice(0, col) + "  " + before.slice(col);
+        col += 2;
+        process.stdout.write("  ");
         return;
       }
 
@@ -268,7 +358,32 @@ function multilinePrompt(): Promise<string> {
       const before = lines[row];
       lines[row] = before.slice(0, col) + s + before.slice(col);
       col += s.length;
-      if (col < lines[row].length) {
+
+      // @-tag detection
+      if (s === "@" && !tag.active) {
+        // Check if preceded by space or start of line (not mid-word)
+        const charBefore = col > 1 ? lines[row][col - 2] : " ";
+        if (charBefore === " " || col === 1) {
+          tag.active = true;
+          tag.atCol = col - 1;
+          tag.atRow = row;
+          tag.query = "";
+          tag.files = getFiles?.() ?? [];
+          tag.matches = tag.files.slice(0, 20);
+          tag.selectedIndex = -1;
+        }
+      } else if (tag.active) {
+        // Space or certain chars exit tag mode
+        if (s === " " || s === "\n" || s === "\r") {
+          deactivateTag();
+        } else {
+          // Update query
+          tag.query = lines[row].slice(tag.atCol + 1, col);
+          updateTagMatches();
+        }
+      }
+
+      if (col < lines[row].length || tag.dropdownLines > 0) {
         redraw();
       } else {
         process.stdout.write(s);
@@ -279,16 +394,22 @@ function multilinePrompt(): Promise<string> {
   });
 }
 
-export function createPrompt(): {
+export interface PromptOptions {
+  /** Provide file list for @-tag autocomplete. Called each time @ is typed. */
+  getFiles?: () => string[];
+}
+
+export function createPrompt(opts?: PromptOptions): {
   prompt: () => Promise<string>;
   enableBracketedPaste: () => void;
   disableBracketedPaste: () => void;
 } {
   const isTTY =
     process.stdin.isTTY && typeof process.stdin.setRawMode === "function";
+  const getFiles = opts?.getFiles;
 
   return {
-    prompt: isTTY ? multilinePrompt : simplePrompt,
+    prompt: isTTY ? () => multilinePrompt(getFiles) : simplePrompt,
     enableBracketedPaste: () => {
       if (isTTY) process.stdout.write("\x1b[?2004h");
     },
