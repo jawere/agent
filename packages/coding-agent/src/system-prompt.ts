@@ -18,7 +18,8 @@ Writes (bash/edit/write) run sequentially. Goal: minimum turns possible.
 # Working Memory
 
 You have .codebase/state.md that persists across turns. Use it to avoid re-reading.
-At start of every turn: read state.md (and tree.yaml if you haven't yet).
+At start of every turn: read state.md (and tree-shallow.yaml if you haven't yet).
+For deep summaries of specific files, read .codebase/summaries.json.
 During work: update state.md after reading/editing files.
 Never re-read a file you've already read this session unless you modified it.
 

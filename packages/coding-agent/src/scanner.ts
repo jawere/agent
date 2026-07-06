@@ -12,7 +12,13 @@ import { createHash } from 'crypto';
 
 const SCAN_INTERVAL_MS = 5 * 60 * 1000; // 5 min cache validity
 const CODEBASE_DIR = '.codebase';
-const TREE_FILE = '.codebase/tree.yaml';
+// ── Output files ───────────────────────────────────────────────
+// tree.yaml: tree structure only (no summaries) — smaller, for file listing
+// tree-full.yaml: same tree but with summaries section appended — full context
+// summaries.json: standalone summaries for agent context lookup
+const TREE_FILE = '.codebase/tree-shallow.yaml';
+const TREE_FULL_FILE = '.codebase/tree.yaml';
+const SUMMARIES_FILE = '.codebase/summaries.json';
 const META_FILE = '.codebase/meta.json';
 const CHECKSUMS_FILE = '.codebase/checksums.json';
 
@@ -511,12 +517,23 @@ async function scanCodebase(
   onProgress?.('writing checksums');
   await writeFile(resolve(workDir, CHECKSUMS_FILE), JSON.stringify(checksums, null, 2) + '\n', 'utf-8');
 
-  // 6. Generate tree.yaml
-  onProgress?.('writing tree.yaml');
+  // 6. Generate tree-shallow.yaml (tree only, no summaries — smaller)
+  onProgress?.('writing tree-shallow.yaml');
   const treeYaml = generateTreeYaml(name, version, tree, summaries);
   await writeFile(resolve(workDir, TREE_FILE), treeYaml, 'utf-8');
 
-  // 7. Generate meta.json
+  // 7. Generate tree-full.yaml (tree + summaries — for full agent context)
+  onProgress?.('writing tree-full.yaml');
+  const treeFullYaml = generateTreeYaml(name, version, tree, summaries, true);
+  await writeFile(resolve(workDir, TREE_FULL_FILE), treeFullYaml, 'utf-8');
+
+  // 8. Generate summaries.json (standalone for agent context lookup)
+  onProgress?.('writing summaries.json');
+  // Strip tree structure, keep only summaries in minimal JSON
+  const summariesJson = JSON.stringify(summaries, null, 2);
+  await writeFile(resolve(workDir, SUMMARIES_FILE), summariesJson + '\n', 'utf-8');
+
+  // 9. Generate meta.json
   onProgress?.('writing meta.json');
   const meta: ScanMeta = {
     scannedAt: Date.now(),
@@ -535,6 +552,7 @@ function generateTreeYaml(
   version: string,
   tree: Record<string, FileEntry[]>,
   summaries: Record<string, FileSummary>,
+  includeSummaries = false,
 ): string {
   const lines: string[] = [];
 
@@ -584,26 +602,28 @@ function generateTreeYaml(
     }
   }
 
-  // Summaries section
-  lines.push('');
-  lines.push('# ── File summaries (for quick agent context) ────────────────────────');
-  lines.push('');
-  lines.push('summaries:');
+  // Summaries section (only in full tree file)
+  if (includeSummaries) {
+    lines.push('');
+    lines.push('# ── File summaries (for quick agent context) ────────────────────────');
+    lines.push('');
+    lines.push('summaries:');
 
-  const summaryKeys = Object.keys(summaries).sort();
-  for (const file of summaryKeys) {
-    const s = summaries[file];
-    lines.push(`  "${file}":`);
-    lines.push(`    lines: ${s.lines}`);
-    lines.push(`    exports: [${s.exports.map((e) => `"${e}"`).join(', ')}]`);
-    if (s.key_functions.length > 0) {
-      lines.push(`    key_functions: [${s.key_functions.map((f) => `"${f}"`).join(', ')}]`);
+    const summaryKeys = Object.keys(summaries).sort();
+    for (const file of summaryKeys) {
+      const s = summaries[file];
+      lines.push(`  "${file}":`);
+      lines.push(`    lines: ${s.lines}`);
+      lines.push(`    exports: [${s.exports.map((e) => `"${e}"`).join(', ')}]`);
+      if (s.key_functions.length > 0) {
+        lines.push(`    key_functions: [${s.key_functions.map((f) => `"${f}"`).join(', ')}]`);
+      }
+      if (s.depends_on.length > 0) {
+        lines.push(`    depends_on: [${s.depends_on.map((d) => `"${d}"`).join(', ')}]`);
+      }
+      lines.push(`    description: |`);
+      lines.push(`      ${s.description}`);
     }
-    if (s.depends_on.length > 0) {
-      lines.push(`    depends_on: [${s.depends_on.map((d) => `"${d}"`).join(', ')}]`);
-    }
-    lines.push(`    description: |`);
-    lines.push(`      ${s.description}`);
   }
 
   return lines.join('\n') + '\n';

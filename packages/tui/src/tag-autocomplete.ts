@@ -50,11 +50,11 @@ export function createTagState(files: string[]): TagState {
 // ── File list helpers ─────────────────────────────────────────────
 
 /**
- * Load file list from .codebase/tree.yaml if available,
+ * Load file list from .codebase/tree-shallow.yaml if available,
  * otherwise do a quick glob of common source directories.
  */
 export function loadFileList(workDir: string): string[] {
-  const treePath = resolve(workDir, ".codebase", "tree.yaml");
+  const treePath = resolve(workDir, ".codebase", "tree-shallow.yaml");
   if (existsSync(treePath)) {
     try {
       const content = readFileSync(treePath, "utf-8");
