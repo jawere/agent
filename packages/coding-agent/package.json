@@ -1,6 +1,6 @@
 {
   "name": "@jawere/coding-agent",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Terminal AI coding agent — reads, edits, writes files and runs commands autonomously",
   "type": "module",
   "main": "./dist/index.js",
@@ -15,7 +15,7 @@
     "dist"
   ],
   "bin": {
-    "jawere": "./dist/cli.js"
+    "jawere": "dist/cli.js"
   },
   "scripts": {
     "clean": "rm -rf dist",
