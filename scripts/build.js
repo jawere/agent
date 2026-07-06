@@ -1,25 +1,29 @@
-import * as esbuild from 'esbuild';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import * as esbuild from "esbuild";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const root = resolve(__dirname, '..');
+const root = resolve(__dirname, "..");
 
-// Build the CLI bundle
+// Build the CLI bundle from the coding-agent package
 await esbuild.build({
-  entryPoints: [resolve(root, 'src/index.ts')],
+  entryPoints: [resolve(root, "packages/coding-agent/src/cli.ts")],
   bundle: true,
-  platform: 'node',
-  target: 'node18',
-  format: 'esm',
-  outfile: resolve(root, 'dist/index.js'),
-  external: ['tsx', 'esbuild', 'better-sqlite3'], // never bundle these
+  platform: "node",
+  target: "node22",
+  format: "esm",
+  outfile: resolve(root, "dist/index.js"),
+  external: [
+    "tsx",
+    "esbuild",
+    "@jawere/ai",
+    "@jawere/agent",
+    "@jawere/tui",
+    "@jawere/coding-agent",
+    "@jawere/orchestrator",
+  ],
   sourcemap: false,
   minify: false,
-  banner: {
-    js: `import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);`,
-  },
 });
 
-console.log('Build complete.');
+console.log("Build complete. Run 'node dist/index.js' to start.");

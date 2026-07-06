@@ -1,37 +1,27 @@
 {
-  "name": "jawere",
-  "version": "1.4.0",
+  "name": "jawere-monorepo",
+  "private": true,
   "type": "module",
-  "bin": {
-    "jawere": "bin/jawere.js"
-  },
-  "files": [
-    "bin",
-    "dist"
+  "workspaces": [
+    "packages/*"
   ],
   "scripts": {
-    "start": "node --env-file .env.local --import tsx src/index.ts",
-    "start:prod": "tsx src/index.ts",
-    "build": "node scripts/build.js",
-    "prepublishOnly": "npm run build"
-  },
-  "dependencies": {
-    "better-sqlite3": "^12.11.1",
-    "openai": "^4.73.0"
+    "clean": "npm run clean --workspaces",
+    "build": "npm run build --workspaces",
+    "check": "npx tsc --noEmit",
+    "start": "node --env-file .env.local --import tsx packages/coding-agent/src/cli.ts",
+    "start:prod": "tsx packages/coding-agent/src/cli.ts",
+    "test": "npm run test --workspaces --if-present",
+    "publish:patch": "npm version patch -ws --no-git-tag-version",
+    "prepublishOnly": "npm run clean && npm run build"
   },
   "devDependencies": {
-    "@semantic-release/commit-analyzer": "^13.0.1",
-    "@semantic-release/github": "^12.0.9",
-    "@semantic-release/npm": "^13.1.5",
-    "@semantic-release/release-notes-generator": "^14.1.1",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.0.0",
-    "esbuild": "^0.23.0",
-    "semantic-release": "^25.0.5",
+    "esbuild": "^0.28.1",
     "tsx": "^4.22.1",
     "typescript": "^5.6.0"
   },
-  "publishConfig": {
-    "registry": "https://registry.npmjs.org"
+  "engines": {
+    "node": ">=22.0.0"
   }
 }

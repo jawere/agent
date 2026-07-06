@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import('../dist/index.js').catch((err) => {
-  console.error('Fatal error:', err);
+import("../packages/coding-agent/dist/cli.js").catch((err) => {
+  console.error("Failed to start jawere:", err);
   process.exit(1);
 });

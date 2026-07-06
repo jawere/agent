@@ -1,0 +1,41 @@
+{
+  "name": "@jawere/ai",
+  "version": "0.1.0",
+  "description": "Unified LLM API with provider abstraction — OpenAI, Anthropic, Gemini, and more",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "npx tsc -p tsconfig.build.json",
+    "test": "echo 'no tests yet'"
+  },
+  "dependencies": {
+    "openai": "^4.73.0"
+  },
+  "optionalDependencies": {
+    "@anthropic-ai/sdk": "^0.54.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.700.0",
+    "@aws-sdk/credential-providers": "^3.700.0",
+    "@aws-sdk/signature-v4": "^3.700.0",
+    "@aws-crypto/sha256-js": "^5.2.0",
+    "@google/generative-ai": "^0.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

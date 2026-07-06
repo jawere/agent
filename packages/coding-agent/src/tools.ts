@@ -400,7 +400,7 @@ function truncateOutput(text: string): TruncateResult {
   return { text: truncated, totalLines, totalBytes, linesShown, truncated: true };
 }
 
-async function execBash(command: string, workDir: string, timeoutSec?: number): Promise<string> {
+export async function execBash(command: string, workDir: string, timeoutSec?: number): Promise<string> {
   // Security check before executing
   const blocked = checkDangerousCommand(command);
   if (blocked) return blocked;
@@ -438,7 +438,7 @@ async function execBash(command: string, workDir: string, timeoutSec?: number): 
   });
 }
 
-async function readFileTool(
+export async function readFileTool(
   path: string,
   workDir: string,
   offset?: number,
@@ -495,7 +495,7 @@ function diffSummary(before: string, after: string): string {
   return `(${linePart} lines, ${bytePart})`;
 }
 
-async function editFileTool(
+export async function editFileTool(
   path: string,
   edits: Array<{ oldText: string; newText: string }>,
   workDir: string,
@@ -563,7 +563,7 @@ async function editFileTool(
   return parts.join('\n');
 }
 
-async function writeFileTool(path: string, content: string, workDir: string): Promise<string> {
+export async function writeFileTool(path: string, content: string, workDir: string): Promise<string> {
   let fullPath: string;
   try {
     fullPath = safeResolve(workDir, path);
@@ -577,7 +577,7 @@ async function writeFileTool(path: string, content: string, workDir: string): Pr
 
 // ── New tools: ls, find, grep ──────────────────────────────────────
 
-async function lsTool(path: string | undefined, workDir: string): Promise<string> {
+export async function lsTool(path: string | undefined, workDir: string): Promise<string> {
   let dir: string;
   try {
     dir = safeResolve(workDir, path || '.');
@@ -625,7 +625,7 @@ async function lsTool(path: string | undefined, workDir: string): Promise<string
   }
 }
 
-async function findTool(
+export async function findTool(
   pattern: string,
   searchPath: string | undefined,
   workDir: string,
@@ -697,7 +697,7 @@ async function findTool(
   ).text;
 }
 
-async function grepTool(
+export async function grepTool(
   pattern: string,
   searchPath: string | undefined,
   include: string | undefined,
@@ -799,7 +799,7 @@ async function grepTool(
 
 // ── Stat tool ───────────────────────────────────────────────────────
 
-async function statTool(path: string, workDir: string): Promise<string> {
+export async function statTool(path: string, workDir: string): Promise<string> {
   let fullPath: string;
   try {
     fullPath = safeResolve(workDir, path);
@@ -856,7 +856,7 @@ async function statTool(path: string, workDir: string): Promise<string> {
 
 // ── Diff tool ───────────────────────────────────────────────────────
 
-async function diffTool(
+export async function diffTool(
   path: string | undefined,
   staged: boolean | undefined,
   base: string | undefined,
@@ -923,7 +923,7 @@ function httpsGetJSON(url: string, timeout = 8000): Promise<unknown> {
   });
 }
 
-async function webSearchTool(query: string, count?: number): Promise<string> {
+export async function webSearchTool(query: string, count?: number): Promise<string> {
   const maxResults = Math.min(Math.max(count ?? 5, 1), 10);
   const encoded = encodeURIComponent(query);
   const ddgUrl = `https://api.duckduckgo.com/?q=${encoded}&format=json&no_html=1&skip_disambig=1`;
@@ -1116,7 +1116,7 @@ function resolveDocSites(query: string, library?: string): string[] {
   return sites;
 }
 
-async function docsSearchTool(
+export async function docsSearchTool(
   query: string,
   library?: string,
   count?: number,

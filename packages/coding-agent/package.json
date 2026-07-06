@@ -1,0 +1,39 @@
+{
+  "name": "@jawere/coding-agent",
+  "version": "0.1.0",
+  "description": "Coding agent app — tools, sessions, extensions, CLI, system prompt",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "bin": {
+    "jawere": "./dist/cli.js"
+  },
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "npx tsc -p tsconfig.build.json",
+    "test": "echo 'no tests yet'"
+  },
+  "dependencies": {
+    "@jawere/ai": "*",
+    "@jawere/agent": "*",
+    "@jawere/tui": "*",
+    "openai": "^4.73.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
