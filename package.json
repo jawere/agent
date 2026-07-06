@@ -13,6 +13,8 @@
     "start": "node --env-file .env.local --import tsx packages/coding-agent/src/cli.ts",
     "start:prod": "tsx packages/coding-agent/src/cli.ts",
     "test": "npm run test --workspaces --if-present",
+    "precommit:install": "cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit && echo 'pre-commit hook installed'",
+    "prepare": "npm run precommit:install 2>/dev/null || true",
     "publish:patch": "npm version patch -ws --no-git-tag-version",
     "prepublishOnly": "npm run clean && npm run build"
   },

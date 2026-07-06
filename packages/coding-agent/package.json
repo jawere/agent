@@ -20,7 +20,7 @@
   "scripts": {
     "clean": "rm -rf dist",
     "build": "node ../../scripts/build.js",
-    "test": "echo 'no tests yet'"
+    "test": "node --test --experimental-strip-types src/*.test.ts"
   },
   "dependencies": {
     "openai": "^4.73.0"

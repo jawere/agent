@@ -1,6 +1,8 @@
 # jawere — AI Coding Agent
 
-Terminal-based AI coding agent. Runs as an interactive REPL — describe tasks in natural language, and the agent reads, edits, writes files, and executes shell commands autonomously.
+An autonomous AI coding agent that runs in your terminal. Describe tasks in natural language, and the agent reads your codebase, edits files, writes new files, and executes shell commands — all while explaining its decisions.
+
+Built on a monorepo of reusable packages: a multi-provider LLM layer, an agent loop engine, a terminal UI toolkit, and a multi-agent orchestrator.
 
 ## Quick Start
 
@@ -12,35 +14,65 @@ npm run setup   # configure provider, API key, model
 npm start
 ```
 
-Or set the key via environment variable:
+After `npm install`, the pre-commit hook is installed automatically. Tests run before every commit.
+
+## Installation
+
+### Prerequisites
+
+- **Node.js 22+** (uses built-in test runner, strip-types, and watch mode)
+- **npm 10+** (workspaces support)
+- A terminal that supports raw mode and bracketed paste (any modern terminal emulator)
+
+### From Source
 
 ```bash
-export AI_API_KEY=sk-...   # works for any provider
+git clone https://github.com/jawere/agent.git
+cd agent
+npm install        # installs dependencies + pre-commit hook
+npm run setup      # interactive setup wizard
+npm start          # start the REPL
+```
+
+### Global Install
+
+```bash
+npm install -g jawere
+jawere --setup     # configure on first run
+jawere             # start
+```
+
+### API Key
+
+You can skip `--setup` and use environment variables instead:
+
+```bash
+export AI_API_KEY=sk-...       # works for any provider
+export AI_PROVIDER=openai      # optional, defaults to deepseek
+export AI_MODEL=gpt-4o         # optional, uses provider default
 npm start
 ```
 
-## Packages
+The setup wizard encrypts your key with AES-256-GCM and stores it at `~/.jawere/key.enc`. The encryption key is derived from your machine identity (hostname + username) combined with a random 256-bit pepper stored at `~/.jawere/.pepper`. No key leaves your machine.
 
-This is a monorepo with 5 packages under npm workspaces:
+## Usage
 
-| Package | Description |
-|---------|-------------|
-| **@jawere/ai** | Unified LLM provider layer (OpenAI, DeepSeek, Anthropic, Google, Azure, Bedrock, Mistral, GitHub Copilot, OpenRouter, Cloudflare, OpenAI-compatible) |
-| **@jawere/agent** | Agent loop engine — stateful agent with tools, hooks, steering/follow-up queues, streaming |
-| **@jawere/coding-agent** | App layer — CLI REPL, tools, sessions, codebase scanner, system prompt |
-| **@jawere/tui** | Terminal UI — spinner, multiline prompt, display formatting |
-| **@jawere/orchestrator** | Multi-agent orchestration (early stage) |
+Start the REPL and type tasks in natural language:
 
-## Features
+```
+> add dark mode toggle to settings
+> fix the race condition in the WebSocket handler
+> refactor the auth module to use JWT instead of sessions
+> write tests for the payment processor
+```
 
-- **Autonomous Agent Loop** — Tool-calling loop with parallel and sequential execution, abort support, hooks
-- **Multi-Provider** — DeepSeek, OpenAI, Anthropic, Google, Azure, Bedrock, Mistral, Groq, xAI, and more
-- **Codebase Scanner** — Pre-scans the project on startup, generating `.codebase/tree.yaml` and `.codebase/checksums.json` so the LLM has structural context before the first prompt
-- **Interactive REPL** — Multiline input (Shift+Enter), session resumption, persistent conversation history
-- **Encrypted API Key** — AES-256-GCM encrypted key storage at `~/.jawere/key.enc` (pepper + machine-derived key)
-- **Session Tree** — pi-compatible v3 JSONL format with branching, compaction, and labeling
+The agent autonomously:
+1. Scans your codebase (cached in `.codebase/tree.yaml`)
+2. Reads relevant files to understand the current state
+3. Plans and executes changes (write, edit, bash commands)
+4. Reports what it did and why
 
-## Commands
+### REPL Commands
 
 | Command | Description |
 |---------|-------------|
@@ -48,91 +80,172 @@ This is a monorepo with 5 packages under npm workspaces:
 | `/sessions` | List past sessions |
 | `/resume <id>` | Resume a past session |
 | `/key` | Show API key status |
-| `/setup` | Re-configure AI provider and key |
-| `/clear` | Clear screen and start fresh session |
-| `/exit`, `/quit` | Exit |
+| `/setup` | Reconfigure AI provider and model |
+| `/clear` | Clear screen and start a fresh session |
+| `/exit`, `/quit` | Exit the REPL |
+
+### Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| Enter | Submit prompt |
+| Shift+Enter | New line (multiline input) |
+| Ctrl+C | Cancel input |
+| Ctrl+D | Exit (on empty line) |
+| Arrow keys | Navigate within input |
+
+## Supported Providers
+
+| Provider | `AI_PROVIDER` value | Default model | Key env var hint |
+|----------|---------------------|---------------|-----------------|
+| DeepSeek | `deepseek` | deepseek-chat | `sk-` |
+| OpenAI | `openai` | gpt-4o | `sk-` |
+| Anthropic | `anthropic` | claude-sonnet-4-20250514 | `sk-ant-` |
+| Google Gemini | `google` | gemini-2.5-pro | `gsk_` |
+| Groq | `groq` | llama-3.3-70b-versatile | `gsk_` |
+| xAI | `xai` | grok-3-beta | `xai-` |
+| Mistral | `mistral` | mistral-large-latest | — |
+| OpenRouter | `openrouter` | openai/gpt-4o | `sk-or-` |
+| Custom | `custom` | gpt-4o | any |
+
+Additional providers (AWS Bedrock, Azure, Cloudflare, GitHub Copilot, Google Vertex, Fireworks, Together) are available by setting `AI_PROVIDER` and the corresponding provider-specific environment variable. See `packages/ai/src/providers/` for the full list.
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AI_API_KEY` | — | API key for any provider |
+| `AI_PROVIDER` | deepseek | Provider ID from the table above |
+| `AI_BASE_URL` | provider default | Custom API base URL |
+| `AI_MODEL` | provider default | Model name override |
+| `WORK_DIR` | cwd | Working directory for the agent |
+| `NODE_ENV` | — | Set to `production` to run compiled JS |
+
+Provider-specific keys also work: `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.
 
 ## Tools
 
 The agent has access to these tools:
 
-- `bash` — Execute shell commands with configurable timeout (max 300s)
-- `read` — Read file contents with line offset/limit
-- `edit` — Exact-text replacement with uniqueness validation, batched edits
-- `write` — Create or overwrite files, auto-creates parent directories
-- `ls` — List directory contents with sizes
-- `find` — Find files by fuzzy name or glob pattern
-- `grep` — Search file contents with regex, file glob filtering
-- `stat` — File/directory metadata (size, line count, mod time)
-- `diff` — Show git diff with support for --staged, path, base ref
-- `web_search` — Search the web via DuckDuckGo
-- `docs` — Search library/framework documentation
+| Tool | Description | Read-only |
+|------|-------------|-----------|
+| `bash` | Execute shell commands (max 300s timeout) | No |
+| `read` | Read file contents with line offset/limit | Yes |
+| `edit` | Exact-text replacement with uniqueness validation | No |
+| `write` | Create or overwrite files (auto-creates parent dirs) | No |
+| `ls` | List directory contents with sizes | Yes |
+| `find` | Find files by fuzzy name or glob pattern | Yes |
+| `grep` | Search file contents with regex | Yes |
+| `stat` | File/directory metadata (size, lines, mod time) | Yes |
+| `diff` | Git diff with staged, path, and base ref support | Yes |
+| `web_search` | Search the web via DuckDuckGo | Yes |
+| `docs` | Search library/framework documentation | Yes |
 
-## Configuration
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `AI_API_KEY` | — | API key (any provider) |
-| `DEEPSEEK_API_KEY` | — | DeepSeek-specific API key |
-| `OPENAI_API_KEY` | — | OpenAI-specific API key |
-| `AI_PROVIDER` | `deepseek` | Provider: `deepseek`, `openai`, or `custom` |
-| `AI_BASE_URL` | provider default | Custom API base URL |
-| `AI_MODEL` | provider default | Model name override |
-| `WORK_DIR` | `process.cwd()` | Working directory for the agent |
-
-## Project Structure
+## Architecture
 
 ```
-├── bin/jawere.js                   # CLI entry point (npm link / global install)
-├── scripts/
-│   ├── build.js                    # esbuild bundler
-│   └── setup.js                    # Interactive setup wizard
-├── packages/
-│   ├── ai/src/                     # @jawere/ai — multi-provider LLM layer
-│   │   ├── types.ts                # Canonical types (Model, Message, Context, Stream)
-│   │   ├── models.ts               # ModelRegistry
-│   │   ├── providers/              # 11 provider implementations
-│   │   ├── complete.ts             # streamSimple, completeSimple, oneShot, chat
-│   │   └── event-stream.ts         # EventStream (pull-based async iterable)
-│   ├── agent/src/                  # @jawere/agent — agent loop engine
-│   │   ├── agent.ts                # Agent class (subscribe, prompt, steer, followUp)
-│   │   ├── agent-loop.ts           # Low-level loop with tool execution (seq/parallel)
-│   │   ├── types.ts                # AgentTool, AgentMessage, AgentEvent, hooks
-│   │   └── proxy.ts                # streamProxy for server-based routing
-│   ├── coding-agent/src/           # @jawere/coding-agent — app layer
-│   │   ├── cli.ts                  # REPL main loop, command handling
-│   │   ├── agent-runner.ts         # Bridges config/tools to Agent + provider
-│   │   ├── agent-tools.ts          # AgentTool[] factory
-│   │   ├── tools.ts                # Tool implementations (bash, read, edit, etc.)
-│   │   ├── scanner.ts              # Background codebase scanner
-│   │   ├── system-prompt.ts        # Agent system prompt
-│   │   ├── config.ts               # Configuration loading
-│   │   ├── crypto.ts               # AES-256-GCM encrypted key storage
-│   │   ├── db.ts                   # Legacy JSON session store
-│   │   └── session/                # pi-compatible v3 JSONL session format
-│   ├── tui/src/                    # @jawere/tui — terminal UI
-│   │   ├── display.ts              # Tool line formatting, assistant rendering
-│   │   ├── prompt.ts               # Multiline prompt with paste support
-│   │   └── spinner.ts              # Braille spinner
-│   └── orchestrator/src/           # @jawere/orchestrator — multi-agent
-│       ├── supervisor.ts           # Instance management
-│       └── rpc-process.ts          # Child process RPC
-├── tsconfig.base.json              # Shared TypeScript config
-├── tsconfig.json                   # Root type-check config
-└── package.json                    # Workspace root
+┌──────────────────────────────────────────┐
+│                 jawere CLI               │  packages/coding-agent
+│  cli.ts ──► agent-runner.ts ──► tools   │  REPL, session mgmt,
+│                    │                     │  codebase scanner
+└────────────────────┼─────────────────────┘
+                     │
+┌────────────────────┼─────────────────────┐
+│              @jawere/agent               │  packages/agent
+│   Agent class ──► agent-loop.ts          │  Stateful agent, tool
+│   hooks, steering, streaming             │  execution (seq/parallel)
+└────────────────────┼─────────────────────┘
+                     │
+┌────────────────────┼─────────────────────┐
+│                @jawere/ai                │  packages/ai
+│   12 providers ──► ModelRegistry         │  Unified LLM API,
+│   EventStream, token utils, retry        │  key resolution
+└──────────────────────────────────────────┘
 ```
 
-## Scripts
+### Packages
+
+| Package | Purpose |
+|---------|---------|
+| **@jawere/ai** | Multi-provider LLM abstraction with 12+ provider implementations, key resolution from env vars/files/commands/keychain, token estimation, and retry logic |
+| **@jawere/agent** | Agent loop engine with streaming, tool execution (sequential/parallel), lifecycle hooks, steering and follow-up message queues, and abort support |
+| **@jawere/coding-agent** | Application layer: CLI REPL, tool implementations, codebase scanner (generates `.codebase/tree.yaml`), session persistence, and encrypted key storage |
+| **@jawere/tui** | Terminal UI components: Gruvbox-themed display formatter, multiline prompt with paste support, and braille spinner |
+| **@jawere/orchestrator** | Multi-agent orchestration: spawn, manage, and coordinate agent instances via JSON-RPC (early stage) |
+
+## Development
+
+### Setup
+
+```bash
+git clone https://github.com/jawere/agent.git
+cd agent
+npm install       # installs deps + pre-commit hook
+```
+
+### Scripts
 
 | Command | Description |
 |---------|-------------|
-| `npm start` | Run in dev mode (tsx) |
-| `npm run start:prod` | Run in prod mode |
-| `npm run setup` | Interactive setup wizard |
+| `npm start` | Run in dev mode (tsx, auto-restart) |
+| `npm run start:prod` | Run compiled JS |
+| `npm run setup` | Interactive provider/key/model setup |
 | `npm run build` | Build all packages |
 | `npm run check` | Type-check all packages |
-| `npm run test` | Run tests (if present) |
-| `npm run clean` | Clean dist directories |
+| `npm test` | Run all tests (122 tests across 5 packages) |
+| `npm run clean` | Remove build artifacts |
+
+### Project Structure
+
+```
+.
+├── packages/
+│   ├── ai/src/             # Provider layer + LLM types
+│   │   ├── providers/      # 12 provider implementations
+│   │   ├── models.ts       # ModelRegistry
+│   │   ├── complete.ts     # High-level API (streamSimple, oneShot, chat)
+│   │   ├── api-keys.ts     # Dynamic key resolution ($VAR, !cmd, file:, keychain:)
+│   │   └── *.test.ts       # 64 tests
+│   ├── agent/src/          # Agent loop engine
+│   │   ├── agent.ts        # Agent class (subscribe, prompt, steer, followUp)
+│   │   ├── agent-loop.ts   # Low-level tool-calling loop
+│   │   └── *.test.ts       # 2 tests
+│   ├── coding-agent/src/   # CLI + tools + scanner
+│   │   ├── cli.ts          # REPL main loop
+│   │   ├── tools.ts        # 11 tool implementations
+│   │   ├── scanner.ts      # Background codebase scanner
+│   │   └── *.test.ts       # 22 tests (crypto + db)
+│   ├── tui/src/            # Terminal UI
+│   │   ├── display.ts      # Gruvbox-themed output formatting
+│   │   ├── prompt.ts       # Multiline input with paste detection
+│   │   └── *.test.ts       # 19 tests
+│   └── orchestrator/src/   # Multi-agent management
+│       ├── supervisor.ts   # Instance CRUD + session ops
+│       └── *.test.ts       # 15 tests
+├── scripts/
+│   ├── pre-commit          # Runs tests before each commit
+│   └── build.js            # esbuild bundler
+├── tsconfig.base.json      # Shared TypeScript config
+└── package.json            # Workspace root
+```
+
+### Testing
+
+Tests use Node's built-in `node:test` runner and `node:assert/strict`. No external test framework required.
+
+```bash
+npm test                    # run all workspace tests
+npm test -w @jawere/ai      # run tests for one package
+node --test --watch -w @jawere/ai  # watch mode for one package
+```
+
+Test files live alongside source: `packages/*/src/*.test.ts`.
+
+A pre-commit hook runs `npm test` on every commit. Install it manually with:
+
+```bash
+npm run precommit:install
+```
 
 ## License
 

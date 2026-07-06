@@ -187,13 +187,11 @@ function serializeMessage(m: ChatCompletionMessageParam): MessageRowParams {
 export function persistMessages(sessionId: string, messages: ChatCompletionMessageParam[]): void {
   if (!storePath) return;
   if (messages.length === 0) return;
-  if (messages[0]?.role === 'system') return; // system prompt isn't persisted
-
   // Count existing messages for this session
   const existingCount = store.messages.filter((m) => m.session_id === sessionId).length;
 
-  // Only persist messages from index `existingCount` onward (exclude system prompt offset)
-  const startIdx = existingCount + 1; // +1 to skip system prompt already counted
+  // Only persist messages from index `existingCount` onward
+  const startIdx = existingCount;
   const newMessages = messages.slice(startIdx);
 
   if (newMessages.length === 0) return;
