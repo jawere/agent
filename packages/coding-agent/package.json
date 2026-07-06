@@ -1,15 +1,14 @@
 {
   "name": "@jawere/coding-agent",
   "version": "0.1.0",
-  "description": "Coding agent app — tools, sessions, extensions, CLI, system prompt",
+  "description": "Terminal AI coding agent — reads, edits, writes files and runs commands autonomously",
   "type": "module",
-  "main": "./src/index.ts",
+  "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./src/index.ts",
-      "default": "./src/index.ts"
+      "import": "./dist/index.js"
     }
   },
   "files": [
@@ -20,14 +19,19 @@
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "npx tsc -p tsconfig.build.json",
+    "build": "node ../../scripts/build.js",
     "test": "echo 'no tests yet'"
   },
   "dependencies": {
-    "@jawere/ai": "*",
-    "@jawere/agent": "*",
-    "@jawere/tui": "*",
     "openai": "^4.73.0"
+  },
+  "optionalDependencies": {
+    "@anthropic-ai/sdk": "^0.54.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.700.0",
+    "@aws-sdk/credential-providers": "^3.700.0",
+    "@aws-sdk/signature-v4": "^3.700.0",
+    "@aws-crypto/sha256-js": "^5.2.0",
+    "@google/generative-ai": "^0.21.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
