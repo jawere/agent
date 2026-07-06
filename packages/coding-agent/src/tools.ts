@@ -350,6 +350,61 @@ export const TOOL_DEFS: OpenAITool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'eval',
+      description:
+        'Evaluate a JavaScript/TypeScript expression inline. ' +
+        'Runs "node -e" with the given expression and returns output. ' +
+        'Use for quick checks like testing a regex, computing a value, ' +
+        'or debugging a utility function. No async/import support.',
+      parameters: {
+        type: 'object',
+        properties: {
+          expression: { type: 'string', description: 'JavaScript expression or code to evaluate' },
+        },
+        required: ['expression'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'run_test',
+      description:
+        'Run tests for a specific package, describe block, or individual test. ' +
+        'Supports --test-name-pattern for filtering. ' +
+        'Example: run_test package=agent describe="db" test="creates session" ' +
+        'Run without describe/test to run all tests in a package.',
+      parameters: {
+        type: 'object',
+        properties: {
+          package: { type: 'string', description: 'Package name (e.g. agent, ai, coding-agent, tui, orchestrator)' },
+          describe: { type: 'string', description: 'Optional describe block name to filter' },
+          test: { type: 'string', description: 'Optional individual test name to filter' },
+        },
+        required: ['package'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'affected_tests',
+      description:
+        'Find which test files are affected by changes in a given source file. ' +
+        'Uses static import analysis from the test indexer. ' +
+        'Example: affected_tests source=packages/coding-agent/src/db.ts',
+      parameters: {
+        type: 'object',
+        properties: {
+          source: { type: 'string', description: 'Source file path to check for affected tests' },
+        },
+        required: ['source'],
+      },
+    },
+  },
 ];
 
 // ── Tool implementations ────────────────────────────────────────────
@@ -1225,6 +1280,85 @@ export async function docsSearchTool(
   return truncateOutput(parts.join('\n\n')).text;
 }
 
+// ── Eval tool (inline expression) ───────────────────────────────────
+
+export async function evalExpressionTool(expression: string, workDir: string): Promise<string> {
+  if (!expression.trim()) {
+    return 'Error: expression cannot be empty';
+  }
+
+  const blocked = [
+    /require\s*\(\s*['"]child_process['"]\)/,
+    /require\s*\(\s*['"]fs['"]\)/,
+    /process\.exit/,
+    /process\.kill/,
+    /exec(File|Sync)?\s*\(/,
+    /spawn(Sync)?\s*\(/,
+  ];
+  for (const re of blocked) {
+    if (re.test(expression)) {
+      return 'Blocked: eval does not allow fs, child_process, or process.exit. Use bash instead.';
+    }
+  }
+
+  const cmd = 'node --input-type=module -e ' + JSON.stringify(expression);
+  return execBash(cmd, workDir, 30);
+}
+
+// ── Isolated test runner ────────────────────────────────────────────
+
+export async function runTestTool(
+  packageName: string,
+  describeName?: string,
+  testName?: string,
+  workDir?: string,
+): Promise<string> {
+  const cwd = workDir || process.cwd();
+
+  let filter = '';
+  if (testName) {
+    filter = '-- --test-name-pattern="' + testName + '"';
+  } else if (describeName) {
+    filter = '-- --test-name-pattern="' + describeName + '"';
+  }
+
+  const cmd = 'npm run test -w @jawere/' + packageName + ' ' + filter;
+  return execBash(cmd, cwd, 120);
+}
+
+// ── Affected tests tool ─────────────────────────────────────────────
+
+export async function affectedTestsTool(sourceFile: string, workDir: string): Promise<string> {
+  const { indexTestFiles, findTestsForSource } = await import('./test-indexer.js');
+  const { resolve, relative } = await import('path');
+
+  const fullSource = resolve(workDir, sourceFile);
+  const relSource = relative(workDir, fullSource);
+
+  let entries;
+  try {
+    entries = await indexTestFiles(workDir);
+  } catch (err: unknown) {
+    return 'Error indexing test files: ' + (err as Error).message;
+  }
+
+  const affected = findTestsForSource(entries, relSource);
+
+  if (affected.length === 0) {
+    return 'No test files depend on ' + relSource + '.';
+  }
+
+  const lines: string[] = [affected.length + ' test file(s) affected by ' + relSource + ':'];
+  for (const entry of affected) {
+    lines.push('  ' + entry.file);
+    for (const d of entry.describes) {
+      lines.push('    describe: "' + d.name + '" (' + d.tests.length + ' tests) — line ' + d.line);
+    }
+  }
+
+  return lines.join('\n');
+}
+
 // ── Tool dispatcher ─────────────────────────────────────────────────
 
 export async function executeTool(
@@ -1291,6 +1425,17 @@ export async function executeTool(
         if (typeof args.query !== 'string' || args.query.length === 0) throw new Error('docs requires a non-empty "query" (string)');
         if (args.count !== undefined && typeof args.count !== 'number') throw new Error('docs "count" must be a number');
         if (args.library !== undefined && typeof args.library !== 'string') throw new Error('docs "library" must be a string');
+        break;
+      case 'eval':
+        if (typeof args.expression !== 'string' || args.expression.length === 0) throw new Error('eval requires a non-empty "expression" (string)');
+        break;
+      case 'run_test':
+        if (typeof args.package !== 'string' || args.package.length === 0) throw new Error('run_test requires a non-empty "package" (string)');
+        if (args.describe !== undefined && typeof args.describe !== 'string') throw new Error('run_test "describe" must be a string');
+        if (args.test !== undefined && typeof args.test !== 'string') throw new Error('run_test "test" must be a string');
+        break;
+      case 'affected_tests':
+        if (typeof args.source !== 'string' || args.source.length === 0) throw new Error('affected_tests requires a non-empty "source" (string)');
         break;
       // ls and diff have no required arguments — no validation needed
     }
@@ -1362,6 +1507,20 @@ export async function executeTool(
           args.library as string | undefined,
           args.count as number | undefined,
         );
+        break;
+      case 'eval':
+        result = await evalExpressionTool(args.expression as string, workDir);
+        break;
+      case 'run_test':
+        result = await runTestTool(
+          args.package as string,
+          args.describe as string | undefined,
+          args.test as string | undefined,
+          workDir,
+        );
+        break;
+      case 'affected_tests':
+        result = await affectedTestsTool(args.source as string, workDir);
         break;
       default:
         result = `Error: Unknown tool: ${fn.name}`;

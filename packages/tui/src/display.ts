@@ -142,69 +142,15 @@ export function writeToolLine(name: string, args: Record<string, unknown>, isErr
 }
 
 /**
- * Write the final assistant response to stdout with formatting.
- * Adds a horizontal rule, colors bullet lists, highlights file paths in blue,
- * and dims parenthetical asides.
+ * Write the final assistant response to stdout as plain text.
+ * No ANSI colors, no horizontal separators, no formatting.
  */
 export function writeAssistantResponse(text: string): void {
-  const columns = process.stdout.columns || 80;
-  const maxWidth = Math.min(columns - 4, 80);
-
   if (!text.trim()) return;
 
-  // Horizontal separator
-  process.stdout.write(`\n${DIM}${"─".repeat(Math.min(columns - 2, 78))}${RESET}\n\n`);
-
-  for (let line of text.split("\n")) {
-    line = line.trimEnd();
-    if (!line.trim()) { process.stdout.write("\n"); continue; }
-
-    let formatted = line;
-
-    // File paths: blue, then back to body color
-    formatted = formatted.replace(
-      /(?<![\/\w\-])([\w.\-]+\/[\w.\-\/]+\.\w{1,6})(?![\/\w\-])/g,
-      `${G_BLUE}$1${G_FG}`,
-    );
-
-    // Bullet points: green marker, warm-white text after
-    const bulletMatch = formatted.match(/^(\s*)([•\-\*])\s/);
-    if (bulletMatch) {
-      const indent = bulletMatch[1];
-      const bullet = bulletMatch[2];
-      const rest = formatted.slice(bulletMatch[0].length);
-      formatted = `${indent}${G_GREEN}${bullet}${G_FG} ${rest}`;
-    }
-
-    // Dim parenthetical asides, then back to body color
-    formatted = formatted.replace(/\(([^)]+)\)/g, `${DIM}($1)${G_FG}`);
-
-    // Wrap each line in G_FG to ensure Gruvbox warm-white body text
-    formatted = `${G_FG}${formatted}${RESET}`;
-
-    // Line wrap
-    if (formatted.length > maxWidth) {
-      const words = formatted.split(" ");
-      let current = "";
-      let firstWord = true;
-      for (const word of words) {
-        const rawLen = stripAnsi(current + (firstWord ? "" : " ") + word).length;
-        if (rawLen > maxWidth && !firstWord) {
-          process.stdout.write(`${current}\n`);
-          current = `${G_FG}${word}`;
-          firstWord = false;
-        } else {
-          current = firstWord ? word : `${current} ${word}`;
-          firstWord = false;
-        }
-      }
-      if (current) process.stdout.write(`${current}${RESET}\n`);
-    } else {
-      process.stdout.write(`${formatted}\n`);
-    }
-  }
-
-  process.stdout.write(`\n`);
+  process.stdout.write("\n");
+  process.stdout.write(text);
+  process.stdout.write("\n\n");
 }
 
 /**

@@ -18,6 +18,9 @@ import { Session } from "./session/session.js";
 import { runScanner } from "./scanner.js";
 import { createPrompt, loadFileList } from "@jawere/tui";
 import { SYSTEM_PROMPT } from "./system-prompt.js";
+import { loadChecksums } from "./scanner.js";
+import { loadProjectContext, saveProjectContext, getChangedFiles } from "./state-persistence.js";
+import { indexTestFiles } from "./test-indexer.js";
 
 // Gruvbox dark palette
 const G_GREEN  = "\x1b[38;2;184;187;38m"; // #b8bb26
@@ -283,6 +286,34 @@ async function main(): Promise<void> {
     process.stderr.write(` ${G_DIM}[skipped: ${msg}]${R}\n`);
   }
 
+  // Phase 1b: Check for changed files since last session
+  try {
+    const checksums = await loadChecksums(config.workDir);
+    if (checksums) {
+      const changes = await getChangedFiles(config.workDir, checksums.files);
+      if (changes.new.length > 0 || changes.modified.length > 0 || changes.deleted.length > 0) {
+        const parts: string[] = [];
+        if (changes.new.length > 0) parts.push(`${changes.new.length} new`);
+        if (changes.modified.length > 0) parts.push(`${changes.modified.length} modified`);
+        if (changes.deleted.length > 0) parts.push(`${changes.deleted.length} deleted`);
+        process.stderr.write(`${G_DIM}  ${parts.join(', ')} file(s) changed since last session${R}\n`);
+      }
+    }
+  } catch { /* best effort */ }
+
+  // Phase 1c: Index test files for affected-tests lookup
+  try {
+    const testIndex = await indexTestFiles(config.workDir);
+    const ctx = await loadProjectContext(config.workDir);
+    ctx.testIndex = testIndex.map(e => ({
+      file: e.file,
+      describe: e.describes.map(d => d.name).join(', '),
+      tests: e.describes.flatMap(d => d.tests),
+      dependsOn: e.imports,
+    }));
+    await saveProjectContext(config.workDir, ctx);
+  } catch { /* best effort */ }
+
   // Phase 2: Init SessionManager
   const sessionManager = new SessionManager({
     sessionsRoot: resolve(config.workDir, ".codebase", "sessions"),
@@ -294,7 +325,7 @@ async function main(): Promise<void> {
   let conversationHistory: any[] = [];
   let sessionShown = false;
 
-  // Init working memory
+  // Init working memory (session-level state.md + cross-session project-context.json)
   try {
     const codebaseDir = resolve(config.workDir, ".codebase");
     await mkdir(codebaseDir, { recursive: true });
@@ -320,6 +351,8 @@ async function main(): Promise<void> {
       ].join("\n"),
       "utf-8",
     );
+    // Load cross-session project context (persists across CLI restarts)
+    await loadProjectContext(config.workDir);
   } catch {
     // best effort
   }
@@ -426,7 +459,7 @@ async function main(): Promise<void> {
             conversationHistory = ctx.messages as any[];
             sessionShown = true;
             console.log(
-              `${G_GREEN}Resumed session ${meta.id.slice(0, 16)}…${R} ${G_DIM}(${ctx.messages.length} messages)${R}`,
+              `${G_GREEN}── Resumed session ${meta.id.slice(0, 16)}…${R} ${G_DIM}(${ctx.messages.length} messages)${R}`,
             );
           }
           break;
@@ -446,7 +479,7 @@ async function main(): Promise<void> {
 
     // Agent run — delegates to the agent loop from @jawere/agent
     if (!sessionShown && currentMetadata) {
-      console.log(`${G_DIM}[session: ${currentMetadata.id.slice(0, 12)}…]${R}`);
+      console.log(`${G_DIM}── session: ${currentMetadata.id.slice(0, 12)}…${R}`);
       sessionShown = true;
     }
 
@@ -476,7 +509,7 @@ async function main(): Promise<void> {
         sessionShown = true;
         if (currentMetadata) {
           console.log(
-            `\n${G_DIM}[session: ${currentMetadata.id.slice(0, 16)}…]${R}`,
+            `\n${G_DIM}── session: ${currentMetadata.id.slice(0, 16)}…${R}`,
           );
         }
       }
@@ -492,6 +525,10 @@ async function main(): Promise<void> {
           // best effort
         }
       }
+
+      // Turn summary
+      const msgCount = result.allMessages?.length ?? 0;
+      console.log(`${G_GREEN2}── done${R} ${G_DIM}(${msgCount} messages)${R}`);
     } catch (err: unknown) {
       runningAbort = null;
       const msg = err instanceof Error ? err.message : String(err);

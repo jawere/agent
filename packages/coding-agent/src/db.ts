@@ -5,7 +5,7 @@ import type { ChatCompletionMessageParam } from 'openai/resources/chat/completio
 // ── Types ───────────────────────────────────────────────────────────
 
 export interface SessionRow {
-  id: string;
+  id: number;
   created_at: string;
   updated_at: string;
   message_count: number;
@@ -13,7 +13,7 @@ export interface SessionRow {
 
 export interface MessageRow {
   id: number;
-  session_id: string;
+  session_id: number;
   role: string;
   content: string | null;
   tool_calls: string | null;
@@ -27,11 +27,12 @@ export interface MessageRow {
 
 interface StoreData {
   nextId: number;
+  nextSessionId: number;
   messages: MessageRow[];
 }
 
 let storePath: string | null = null;
-let store: StoreData = { nextId: 1, messages: [] };
+let store: StoreData = { nextId: 1, nextSessionId: 1, messages: [] };
 
 function getStorePath(workDir: string): string {
   const dir = resolve(workDir, '.codebase');
@@ -45,11 +46,12 @@ function loadStore(): void {
     const parsed = JSON.parse(raw);
     store = {
       nextId: parsed.nextId ?? 1,
+      nextSessionId: parsed.nextSessionId ?? 1,
       messages: parsed.messages ?? [],
     };
   } catch {
     // File doesn't exist or is corrupt — start fresh
-    store = { nextId: 1, messages: [] };
+    store = { nextId: 1, nextSessionId: 1, messages: [] };
   }
 }
 
@@ -74,22 +76,23 @@ export function closeDb(): void {
   if (storePath) {
     saveStore();
     storePath = null;
-    store = { nextId: 1, messages: [] };
+    store = { nextId: 1, nextSessionId: 1, messages: [] };
   }
 }
 
 // ── Session helpers ─────────────────────────────────────────────────
 
-export function createSession(): string {
+export function createSession(): number {
   if (!storePath) throw new Error('Database not initialized');
-  const id = `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const id = store.nextSessionId++;
+  saveStore();
   return id;
 }
 
 export function listSessions(limit = 20): SessionRow[] {
   if (!storePath) return [];
 
-  const sessionMap = new Map<string, { created_at: string; updated_at: string; count: number }>();
+  const sessionMap = new Map<number, { created_at: string; updated_at: string; count: number }>();
   for (const msg of store.messages) {
     const existing = sessionMap.get(msg.session_id);
     if (existing) {
@@ -115,7 +118,7 @@ export function listSessions(limit = 20): SessionRow[] {
   return sessions.slice(0, limit);
 }
 
-export function getSessionMessages(sessionId: string): ChatCompletionMessageParam[] {
+export function getSessionMessages(sessionId: number): ChatCompletionMessageParam[] {
   if (!storePath) return [];
 
   const rows = store.messages
@@ -152,7 +155,7 @@ export function getSessionMessages(sessionId: string): ChatCompletionMessagePara
   return messages;
 }
 
-export function deleteSession(sessionId: string): boolean {
+export function deleteSession(sessionId: number): boolean {
   if (!storePath) return false;
   const before = store.messages.length;
   store.messages = store.messages.filter((m) => m.session_id !== sessionId);
@@ -184,21 +187,24 @@ function serializeMessage(m: ChatCompletionMessageParam): MessageRowParams {
 
 // ── Message persistence ─────────────────────────────────────────────
 
-export function persistMessages(sessionId: string, messages: ChatCompletionMessageParam[]): void {
+export function persistMessages(sessionId: number, messages: ChatCompletionMessageParam[]): void {
   if (!storePath) return;
   if (messages.length === 0) return;
-  // Count existing messages for this session
+  // Strip system messages from the incoming batch first
+  const nonSystemMessages = messages.filter(m => m.role !== 'system');
+
+  if (nonSystemMessages.length === 0) return;
+
+  // Count existing non-system messages for this session
   const existingCount = store.messages.filter((m) => m.session_id === sessionId).length;
 
-  // Only persist messages from index `existingCount` onward
-  const startIdx = existingCount;
-  const newMessages = messages.slice(startIdx);
+  // Only persist messages from index `existingCount` onward (in non-system array)
+  const newMessages = nonSystemMessages.slice(existingCount);
 
   if (newMessages.length === 0) return;
 
   const now = new Date().toISOString();
   for (const m of newMessages) {
-    if (m.role === 'system') continue;
     const s = serializeMessage(m);
     store.messages.push({
       id: store.nextId++,
@@ -216,7 +222,7 @@ export function persistMessages(sessionId: string, messages: ChatCompletionMessa
 }
 
 /** Replace all messages for a session (used when continuing a loaded session) */
-export function replaceSessionMessages(sessionId: string, messages: ChatCompletionMessageParam[]): void {
+export function replaceSessionMessages(sessionId: number, messages: ChatCompletionMessageParam[]): void {
   if (!storePath) return;
 
   // Delete existing messages for this session

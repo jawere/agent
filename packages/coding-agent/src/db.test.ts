@@ -34,8 +34,9 @@ describe("db", () => {
     it("generates a unique session id", () => {
       const id1 = dbModule.createSession();
       const id2 = dbModule.createSession();
-      assert.ok(id1.startsWith("s_"));
-      assert.notEqual(id1, id2);
+      assert.equal(typeof id1, "number");
+      assert.equal(id2, id1 + 1);
+      assert.ok(id1 >= 1);
     });
 
     it("throws when db not initialized", () => {
@@ -58,6 +59,7 @@ describe("db", () => {
       const sessions = dbModule.listSessions();
       assert.equal(sessions.length, 1);
       assert.equal(sessions[0].id, sid);
+      assert.equal(typeof sessions[0].id, "number");
       assert.equal(sessions[0].message_count, 2);
 
       const retrieved = dbModule.getSessionMessages(sid);
@@ -123,7 +125,8 @@ describe("db", () => {
       ]);
 
       const retrieved = dbModule.getSessionMessages(sid);
-      assert.ok(retrieved.length >= 4); // q1, a1, q2, a2 (may include duplicate a1 due to re-persist)
+      // Should be exactly: q1, a1, q2, a2 (no duplicates)
+      assert.equal(retrieved.length, 4);
     });
   });
 
@@ -162,7 +165,7 @@ describe("db", () => {
     });
 
     it("returns false for unknown session", () => {
-      assert.equal(dbModule.deleteSession("nope"), false);
+      assert.equal(dbModule.deleteSession(9999), false);
     });
   });
 

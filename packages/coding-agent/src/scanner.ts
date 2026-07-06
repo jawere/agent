@@ -204,7 +204,26 @@ function extractKeyFunctions(lines: string[]): string[] {
 }
 
 function generateDescription(filepath: string, lines: string[], exports: string[]): string {
+  // Extract behavioral hints from function bodies for better summaries
+  const behaviorHints = extractBehaviorHints(lines);
+
   const basenameLower = basename(filepath).toLowerCase();
+
+  // For test files, extract describe/it blocks
+  if (basenameLower.includes('.test.') || basenameLower.includes('.spec.')) {
+    const testDescribes: string[] = [];
+    const testTests: string[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const descMatch = lines[i].match(/describe\(\s*['"]([^'"]+)['"]/);
+      if (descMatch) testDescribes.push(descMatch[1]);
+      const testMatch = lines[i].match(/(?:it|test)\(\s*['"]([^'"]+)['"]/);
+      if (testMatch) testTests.push(testMatch[1]);
+    }
+    const parts: string[] = ['Test file'];
+    if (testDescribes.length > 0) parts.push(`describes: ${testDescribes.slice(0, 3).join(', ')}${testDescribes.length > 3 ? ', …' : ''}`);
+    if (testTests.length > 0) parts.push(`${testTests.length} tests`);
+    return parts.join(' — ');
+  }
   const ext = filepath.includes('.') ? filepath.split('.').pop()?.toLowerCase() : '';
 
   // ── By filename (specific) ──
@@ -240,9 +259,11 @@ function generateDescription(filepath: string, lines: string[], exports: string[
   if (ext === 'js') return 'JavaScript module.';
   if (ext === 'ts' || ext === 'tsx') {
     if (exports.length > 0) {
-      return `Exports: ${exports.slice(0, 5).join(', ')}${exports.length > 5 ? ', …' : ''}.`;
+      const hints = behaviorHints.length > 0 ? ` ${behaviorHints.slice(0, 3).join('; ')}.` : '';
+      return `Exports: ${exports.slice(0, 5).join(', ')}${exports.length > 5 ? ', …' : ''}.${hints}`;
     }
-    return 'TypeScript source file.';
+    const hints = behaviorHints.length > 0 ? ` ${behaviorHints.slice(0, 3).join('; ')}.` : '';
+    return `TypeScript source file.${hints}`;
   }
   if (ext === 'd.ts') return 'TypeScript type declarations.';
 
@@ -251,6 +272,41 @@ function generateDescription(filepath: string, lines: string[], exports: string[
     return `Exports: ${exports.slice(0, 5).join(', ')}${exports.length > 5 ? ', …' : ''}.`;
   }
   return 'Source file.';
+}
+
+/**
+ * Extract short behavioral hints from function bodies.
+ * Looks for edge-case comments, return-type patterns, and key logic branches.
+ */
+function extractBehaviorHints(lines: string[]): string[] {
+  const hints: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // Comment hints: "// Returns ...", "// Handles ...", "// Skips ..."
+    const commentMatch = trimmed.match(/^\/\/\s*(Returns|Handles|Skips|Throws|Strips|Only|Unless|If)\s+(.+)/i);
+    if (commentMatch) {
+      hints.push(`${commentMatch[1]}: ${commentMatch[2].slice(0, 80)}`);
+      if (hints.length >= 5) break;
+      continue;
+    }
+    // JSDoc @returns
+    const jsdocMatch = trimmed.match(/@returns?\s+\{([^}]+)\}\s*(.+)/);
+    if (jsdocMatch) {
+      hints.push(`Returns ${jsdocMatch[2].slice(0, 60)}`);
+      if (hints.length >= 5) break;
+      continue;
+    }
+    // Edge-case guards: `if (x === null) return` or `if (!x) return`
+    const guardMatch = trimmed.match(/^\s*if\s*\([^)]+\)\s*return\s*([^;]+)?;/);
+    if (guardMatch && guardMatch[1]) {
+      const val = guardMatch[1].trim().slice(0, 40);
+      if (val && !['null', 'undefined', 'false', 'true', '0', '""', "''"].includes(val)) {
+        hints.push(`Early return: ${val}`);
+        if (hints.length >= 5) break;
+      }
+    }
+  }
+  return hints;
 }
 
 async function summarizeFile(filepath: string): Promise<FileSummary | null> {

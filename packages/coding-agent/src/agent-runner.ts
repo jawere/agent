@@ -28,7 +28,7 @@ import type { Config } from "./config.js";
 
 export interface RunAgentOptions {
   config: Config;
-  sessionId?: string;
+  sessionId?: number;
   history: AgentMessage[];
   signal?: AbortSignal;
 }

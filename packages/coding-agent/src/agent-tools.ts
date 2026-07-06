@@ -13,6 +13,9 @@ import {
   diffTool,
   webSearchTool,
   docsSearchTool,
+  evalExpressionTool,
+  runTestTool,
+  affectedTestsTool,
 } from "./tools.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -268,6 +271,76 @@ export function createAgentTools(workDir: string): AgentTool[] {
       async execute(_id, rawArgs) {
         const args = rawArgs as { query: string; count?: number };
         const result = await webSearchTool(args.query, args.count);
+        return ok(result);
+      },
+    },
+
+    // ── eval (inline expression runner) ──────────────────────────
+    {
+      name: "eval",
+      description:
+        "Evaluate a JavaScript/TypeScript expression inline. " +
+        "Runs \"node -e\" with the given expression and returns output. " +
+        "Use for quick checks like testing a regex, computing a value, " +
+        "or debugging a utility function. No async/import support.",
+      parameters: {
+        type: "object",
+        properties: {
+          expression: { type: "string", description: "JavaScript expression or code to evaluate" },
+        },
+        required: ["expression"],
+      },
+      readOnly: true,
+      async execute(_id, rawArgs) {
+        const args = rawArgs as { expression: string };
+        const result = await evalExpressionTool(args.expression, workDir);
+        return ok(result);
+      },
+    },
+
+    // ── run_test (isolated test runner) ────────────────────────────
+    {
+      name: "run_test",
+      description:
+        "Run tests for a specific package, describe block, or individual test. " +
+        "Supports --test-name-pattern for filtering. " +
+        "Example: run_test package=agent describe=\"db\" test=\"creates session\" " +
+        "Run without describe/test to run all tests in a package.",
+      parameters: {
+        type: "object",
+        properties: {
+          package: { type: "string", description: "Package name (e.g. agent, ai, coding-agent, tui, orchestrator)" },
+          describe: { type: "string", description: "Optional describe block name to filter" },
+          test: { type: "string", description: "Optional individual test name to filter" },
+        },
+        required: ["package"],
+      },
+      readOnly: true,
+      async execute(_id, rawArgs) {
+        const args = rawArgs as { package: string; describe?: string; test?: string };
+        const result = await runTestTool(args.package, args.describe, args.test, workDir);
+        return ok(result);
+      },
+    },
+
+    // ── affected_tests (find tests impacted by changes) ──────────
+    {
+      name: "affected_tests",
+      description:
+        "Find which test files are affected by changes in a given source file. " +
+        "Uses static import analysis from the test indexer. " +
+        "Example: affected_tests source=packages/coding-agent/src/db.ts",
+      parameters: {
+        type: "object",
+        properties: {
+          source: { type: "string", description: "Source file path to check for affected tests" },
+        },
+        required: ["source"],
+      },
+      readOnly: true,
+      async execute(_id, rawArgs) {
+        const args = rawArgs as { source: string };
+        const result = await affectedTestsTool(args.source, workDir);
         return ok(result);
       },
     },
