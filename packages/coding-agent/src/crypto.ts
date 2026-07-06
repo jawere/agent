@@ -66,8 +66,19 @@ export async function decrypt(encoded: string): Promise<string | null> {
 const KEY_FILE = join(homedir(), '.jawere', 'key.enc');
 const CONFIG_FILE = join(homedir(), '.jawere', 'config.json');
 
+export type SavedProvider =
+  | 'deepseek'
+  | 'openai'
+  | 'anthropic'
+  | 'google'
+  | 'groq'
+  | 'xai'
+  | 'mistral'
+  | 'openrouter'
+  | 'custom';
+
 export interface SavedConfig {
-  provider: 'deepseek' | 'openai' | 'custom';
+  provider: SavedProvider;
   baseURL?: string;
   model?: string;
 }

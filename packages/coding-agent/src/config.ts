@@ -1,4 +1,4 @@
-import { loadKey, hasKey, loadSavedConfig, type SavedConfig } from './crypto.js';
+import { loadKey, hasKey, loadSavedConfig, type SavedConfig, type SavedProvider } from './crypto.js';
 
 export interface Config {
   /** API base URL */
@@ -8,7 +8,7 @@ export interface Config {
   /** Model name */
   model: string;
   /** AI provider */
-  provider: 'deepseek' | 'openai' | 'custom';
+  provider: SavedProvider;
   /** Working directory */
   workDir: string;
   /** Whether the key came from encrypted storage */
@@ -17,10 +17,16 @@ export interface Config {
   isDev: boolean;
 }
 
-const PROVIDER_DEFAULTS: Record<string, { baseURL: string; model: string }> = {
-  deepseek: { baseURL: 'https://api.deepseek.com/v1', model: 'deepseek-v4-pro' },
-  openai: { baseURL: 'https://api.openai.com/v1', model: 'gpt-4o' },
-  custom: { baseURL: 'https://api.openai.com/v1', model: 'gpt-4o' },
+const PROVIDER_DEFAULTS: Record<SavedProvider, { baseURL: string; model: string }> = {
+  deepseek:   { baseURL: 'https://api.deepseek.com/v1',          model: 'deepseek-chat' },
+  openai:     { baseURL: 'https://api.openai.com/v1',             model: 'gpt-4o' },
+  anthropic:  { baseURL: 'https://api.anthropic.com/v1',          model: 'claude-sonnet-4-20250514' },
+  google:     { baseURL: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.5-pro' },
+  groq:       { baseURL: 'https://api.groq.com/openai/v1',        model: 'llama-3.3-70b-versatile' },
+  xai:        { baseURL: 'https://api.x.ai/v1',                   model: 'grok-3-beta' },
+  mistral:    { baseURL: 'https://api.mistral.ai/v1',             model: 'mistral-large-latest' },
+  openrouter: { baseURL: 'https://openrouter.ai/api/v1',          model: 'openai/gpt-4o' },
+  custom:     { baseURL: 'https://api.openai.com/v1',             model: 'gpt-4o' },
 };
 
 function isDevMode(): boolean {
@@ -71,7 +77,7 @@ export async function loadConfig(): Promise<Config> {
   } catch { /* ignore */ }
 
   // Determine provider: saved config > env var > default
-  const provider = (process.env.AI_PROVIDER as Config['provider'])
+  const provider = (process.env.AI_PROVIDER as SavedProvider | undefined)
     || savedConfig?.provider
     || 'deepseek';
 

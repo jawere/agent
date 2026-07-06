@@ -93,7 +93,13 @@ async function setupKey(): Promise<void> {
   console.log("Select AI provider:");
   console.log(`  ${G_GREEN2}1.${R} DeepSeek`);
   console.log(`  ${G_GREEN2}2.${R} OpenAI`);
-  console.log(`  ${G_GREEN2}3.${R} Custom (enter base URL)`);
+  console.log(`  ${G_GREEN2}3.${R} Anthropic`);
+  console.log(`  ${G_GREEN2}4.${R} Google Gemini`);
+  console.log(`  ${G_GREEN2}5.${R} Groq`);
+  console.log(`  ${G_GREEN2}6.${R} xAI (Grok)`);
+  console.log(`  ${G_GREEN2}7.${R} Mistral`);
+  console.log(`  ${G_GREEN2}8.${R} OpenRouter`);
+  console.log(`  ${G_GREEN2}9.${R} Custom (enter base URL)`);
   console.log("");
 
   const choice = (await ask(`Choice [1]: `)) || "1";
@@ -102,31 +108,65 @@ async function setupKey(): Promise<void> {
   let baseURL: string | undefined;
   let defaultModel: string;
 
-  if (choice === "2") {
-    provider = "openai";
-    defaultModel = "gpt-4o";
-  } else if (choice === "3") {
-    provider = "custom";
-    console.log("");
-    baseURL = await ask("Base URL (e.g. https://api.openai.com/v1): ");
-    if (!baseURL) {
-      console.log("No URL entered. Aborting setup.");
-      rl.close();
-      return;
-    }
-    defaultModel = "gpt-4o";
-  } else {
-    provider = "deepseek";
-    defaultModel = "deepseek-v4-pro";
+  switch (choice) {
+    case "2":
+      provider = "openai";
+      defaultModel = "gpt-4o";
+      break;
+    case "3":
+      provider = "anthropic";
+      defaultModel = "claude-sonnet-4-20250514";
+      break;
+    case "4":
+      provider = "google";
+      defaultModel = "gemini-2.5-pro";
+      break;
+    case "5":
+      provider = "groq";
+      defaultModel = "llama-3.3-70b-versatile";
+      break;
+    case "6":
+      provider = "xai";
+      defaultModel = "grok-3-beta";
+      break;
+    case "7":
+      provider = "mistral";
+      defaultModel = "mistral-large-latest";
+      break;
+    case "8":
+      provider = "openrouter";
+      defaultModel = "openai/gpt-4o";
+      break;
+    case "9":
+      provider = "custom";
+      console.log("");
+      baseURL = await ask("Base URL (e.g. https://api.openai.com/v1): ");
+      if (!baseURL) {
+        console.log("No URL entered. Aborting setup.");
+        rl.close();
+        return;
+      }
+      defaultModel = "gpt-4o";
+      break;
+    default:
+      provider = "deepseek";
+      defaultModel = "deepseek-chat";
+      break;
   }
 
   console.log("");
-  const keyHint =
-    provider === "openai"
-      ? "sk-"
-      : provider === "deepseek"
-        ? "sk-"
-        : "";
+  const keyHints: Record<string, string> = {
+    openai: "sk-",
+    deepseek: "sk-",
+    anthropic: "sk-ant-",
+    google: "",
+    groq: "gsk_",
+    xai: "xai-",
+    mistral: "",
+    openrouter: "sk-or-",
+    custom: "",
+  };
+  const keyHint = keyHints[provider] ?? "";
   const hintText = keyHint ? ` (starts with ${keyHint})` : "";
   console.log(`Enter your API key${hintText}:`);
   const key = await ask("API Key: ");

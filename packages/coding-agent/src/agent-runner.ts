@@ -1,7 +1,16 @@
 // @jawere/coding-agent — Agent-based runner (wired to @jawere/agent + @jawere/ai providers)
 
 import type { Model, Provider } from "@jawere/ai";
-import { openAIProvider } from "@jawere/ai";
+import {
+  openAIProvider,
+  deepseekProvider,
+  anthropicProvider,
+  googleGenerativeAIProvider,
+  groqProvider,
+  xAIProvider,
+  mistralProvider,
+  openRouterProvider,
+} from "@jawere/ai";
 import { Agent } from "@jawere/agent";
 import type { AgentMessage, AgentEvent, StreamFn } from "@jawere/agent";
 import { createAgentTools } from "./agent-tools.js";
@@ -52,10 +61,31 @@ function buildModel(config: Config): Model {
 /**
  * Create a Provider using @jawere/ai's built-in provider implementations.
  * Selects the correct provider based on config.provider.
- * All providers accept (apiKey?, baseURL?) constructor signature.
  */
 function createProvider(config: Config): Provider {
-  return openAIProvider(config.apiKey, config.baseURL);
+  const { apiKey, baseURL, provider } = config;
+
+  switch (provider) {
+    case "openai":
+      return openAIProvider(apiKey, baseURL);
+    case "deepseek":
+      return deepseekProvider(apiKey, baseURL);
+    case "anthropic":
+      return anthropicProvider(apiKey);
+    case "google":
+      return googleGenerativeAIProvider(apiKey);
+    case "groq":
+      return groqProvider(apiKey);
+    case "xai":
+      return xAIProvider(apiKey);
+    case "mistral":
+      return mistralProvider(apiKey);
+    case "openrouter":
+      return openRouterProvider(apiKey);
+    case "custom":
+    default:
+      return openAIProvider(apiKey, baseURL);
+  }
 }
 
 // ── Streaming display ─────────────────────────────────────────────────
