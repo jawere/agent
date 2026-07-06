@@ -11,6 +11,10 @@ project:
 
 tree:
   root:
+    - AGENT_ISSUES.md:
+        type: docs
+        desc: "Agent loop — API calls, tool execution, spinner, retry logic."
+        size: 5118
     - DESIGN.md:
         type: docs
         desc: "Documentation file."
@@ -51,7 +55,7 @@ tree:
     - tsconfig.build.json:
         type: config
         desc: "Configuration loading and management."
-        size: 188
+        size: 204
   packages/agent/src/:
     - agent-loop.ts:
         type: other
@@ -85,7 +89,7 @@ tree:
     - tsconfig.build.json:
         type: config
         desc: "Configuration loading and management."
-        size: 188
+        size: 204
   packages/ai/src/:
     - api-keys.test.ts:
         type: test
@@ -184,7 +188,7 @@ tree:
     - tsconfig.build.json:
         type: config
         desc: "Configuration loading and management."
-        size: 188
+        size: 204
   packages/coding-agent/src/:
     - agent-runner.ts:
         type: other
@@ -197,7 +201,7 @@ tree:
     - cli.ts:
         type: other
         desc: "TypeScript source file."
-        size: 14429
+        size: 14498
     - config.ts:
         type: other
         desc: "Configuration loading and management."
@@ -267,7 +271,7 @@ tree:
     - tsconfig.build.json:
         type: config
         desc: "Configuration loading and management."
-        size: 188
+        size: 204
   packages/orchestrator/src/:
     - index.ts:
         type: other
@@ -297,7 +301,7 @@ tree:
     - tsconfig.build.json:
         type: config
         desc: "Configuration loading and management."
-        size: 188
+        size: 204
   packages/tui/src/:
     - display.test.ts:
         type: test
@@ -310,15 +314,19 @@ tree:
     - index.ts:
         type: other
         desc: "Main entry point and REPL loop."
-        size: 337
+        size: 475
     - prompt.ts:
         type: other
         desc: "System prompt definition for the agent."
-        size: 8847
+        size: 20217
     - spinner.ts:
         type: other
         desc: "Exports: Spinner, createSpinner."
         size: 2249
+    - tag-autocomplete.ts:
+        type: other
+        desc: "Exports: TagState, createTagState, loadFileList, matchFiles, renderDropdown, …."
+        size: 7662
   pi-reference/:
     - AGENTS.md:
         type: docs
@@ -4239,6 +4247,11 @@ tree:
 # ── File summaries (for quick agent context) ────────────────────────
 
 summaries:
+  "AGENT_ISSUES.md":
+    lines: 89
+    exports: []
+    description: |
+      Agent loop — API calls, tool execution, spinner, retry logic.
   "DESIGN.md":
     lines: 539
     exports: []
@@ -4488,7 +4501,7 @@ summaries:
     description: |
       Agent loop — API calls, tool execution, spinner, retry logic.
   "packages/coding-agent/src/cli.ts":
-    lines: 457
+    lines: 459
     exports: []
     key_functions: ["center", "printBanner", "printHelp", "formatTime", "setupKey", "main"]
     depends_on: ["./config.js", "./crypto.js", "./session/manager.js", "./session/types.js", "./session/session.js", "./scanner.js", "./system-prompt.js"]
@@ -4648,15 +4661,16 @@ summaries:
     description: |
       Exports: ToolLineOptions, formatToolStart, formatToolEnd, DisplayState, createDisplayState, ….
   "packages/tui/src/index.ts":
-    lines: 15
+    lines: 21
     exports: []
-    depends_on: ["./spinner.ts", "./spinner.ts", "./prompt.ts", "./display.ts"]
+    depends_on: ["./spinner.ts", "./spinner.ts", "./prompt.ts", "./prompt.ts", "./display.ts", "./tag-autocomplete.ts"]
     description: |
       Main entry point and REPL loop.
   "packages/tui/src/prompt.ts":
-    lines: 300
-    exports: ["createPrompt"]
+    lines: 581
+    exports: ["PromptOptions", "createPrompt"]
     key_functions: ["simplePrompt", "multilinePrompt", "createPrompt"]
+    depends_on: ["./tag-autocomplete.ts"]
     description: |
       System prompt definition for the agent.
   "packages/tui/src/spinner.ts":
@@ -4665,6 +4679,12 @@ summaries:
     key_functions: ["createSpinner"]
     description: |
       Exports: Spinner, createSpinner.
+  "packages/tui/src/tag-autocomplete.ts":
+    lines: 259
+    exports: ["TagState", "createTagState", "loadFileList", "matchFiles", "renderDropdown", "getCompletion", "findAtQuery"]
+    key_functions: ["createTagState", "loadFileList", "parseFilesFromTreeYaml", "matchFiles", "renderDropdown", "truncatePath", "getCompletion", "findAtQuery", "isWordChar"]
+    description: |
+      Exports: TagState, createTagState, loadFileList, matchFiles, renderDropdown, ….
   "packages/tui/tsconfig.build.json":
     lines: 10
     exports: []
