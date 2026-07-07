@@ -14,7 +14,7 @@
 	"scripts": {
 		"clean": "shx rm -rf dist",
 		"build": "npx tsc -p tsconfig.build.json",
-		"test": "node --test --test-reporter=dot --test-reporter-destination=stdout test/*.test.ts",
+		"test": "node --test --experimental-strip-types --test-reporter=dot --test-reporter-destination=stdout test/*.test.ts",
 		"prepublishOnly": "npm run clean && npm run build"
 	},
 	"files": [
