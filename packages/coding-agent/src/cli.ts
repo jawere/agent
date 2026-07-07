@@ -1,20 +1,745 @@
-#!/usr/bin/env node
-/**
- * CLI entry point for the refactored coding agent.
- * Uses main.ts with AgentSession and new mode modules.
- *
- * Test with: npx tsx src/cli-new.ts [args...]
- */
-import { APP_NAME } from "./config.ts";
-import { configureHttpDispatcher } from "./core/http-dispatcher.ts";
-import { main } from "./main.ts";
+// @jawere/coding-agent — Main CLI entry point (REPL loop)
 
-process.title = APP_NAME;
-process.env.JAWERE_CODING_AGENT = "true";
-process.emitWarning = (() => {}) as typeof process.emitWarning;
+import * as readline from "readline";
+import { mkdir, readFile } from "fs/promises";
+import { existsSync } from "fs";
+import { resolve } from "path";
+import { loadConfig, type Config } from "./config.js";
+import {
+  saveKey,
+  loadKey,
+  saveConfig,
+  deleteKey,
+  loadSavedConfig,
+  type SavedConfig,
+} from "./crypto.js";
+import { createPrompt } from "@jawere/tui";
+import { runScanner, loadFileList } from "./scanner.js";
+import { PersistentAgent, type DisplayState, createDisplaySubscriber } from "./agent-runner.js";
+import { createSpinner } from "@jawere/tui";
 
-// Configure undici's global dispatcher before provider SDKs issue requests.
-// Runtime settings are applied once SettingsManager has loaded global/project settings.
-configureHttpDispatcher();
+// Gruvbox dark palette
+const G_GREEN  = "\x1b[38;2;184;187;38m"; // #b8bb26
+const G_GREEN2 = "\x1b[38;2;142;192;124m";// #8ec07c
+const G_GRAY   = "\x1b[38;2;146;131;116m"; // #928374
+const G_DIM    = "\x1b[38;2;102;92;84m";  // #665c54
+const G_FG     = "\x1b[38;2;235;219;178m";// #ebdbb2
+const G_RED    = "\x1b[38;2;251;73;52m";  // #fb4934
+const G_YELLOW = "\x1b[38;2;250;189;47m"; // #fabd2f
+const G_BLUE   = "\x1b[38;2;131;165;152m";// #83a598
+const G_ORANGE = "\x1b[38;2;254;128;25m"; // #fe8019
+const R = "\x1b[0m";
 
-main(process.argv.slice(2));
+function center(text: string, width: number): string {
+  const visible = text.replace(/\x1b\[[0-9;]*m/g, "");
+  const pad = Math.max(0, Math.floor((width - visible.length) / 2));
+  return " ".repeat(pad) + text;
+}
+
+function printBanner(config: { model: string; provider: string; isDev: boolean }) {
+  const cols = process.stdout.columns || 60;
+  const sep = G_DIM + "─".repeat(Math.min(cols - 2, 50)) + R;
+  console.log("");
+  console.log(
+    center(
+      `${G_GREEN}${config.provider}${R} ${G_DIM}/${R} ${G_FG}${config.model}${R}  ${G_DIM}${config.isDev ? "dev" : "prod"}${R}`,
+      cols,
+    ),
+  );
+  console.log(center(sep, cols));
+  console.log("");
+}
+
+// ── Models.json loader ─────────────────────────────────────────────
+
+interface ModelEntry {
+  id: string;
+  name: string;
+  contextWindow: number;
+}
+
+interface ProviderEntry {
+  baseURL: string;
+  envKey: string;
+  models: ModelEntry[];
+}
+
+interface ModelsConfig {
+  version: string;
+  defaultModel: string;
+  defaultProvider: string;
+  providers: Record<string, ProviderEntry>;
+  thinkingLevels: Record<string, { description: string }>;
+  defaults: { thinkingLevel: string; timeout: number };
+}
+
+async function loadModelsConfig(): Promise<ModelsConfig | null> {
+  // Try project-level, then package-level
+  const paths = [
+    resolve(process.cwd(), "models.json"),
+    resolve(process.cwd(), "packages/coding-agent/models.json"),
+  ];
+  // Resolve relative to the module
+  const selfDir = new URL(".", import.meta.url).pathname;
+  paths.push(resolve(selfDir, "../../models.json"));
+
+  for (const p of paths) {
+    if (existsSync(p)) {
+      try {
+        return JSON.parse(await readFile(p, "utf-8"));
+      } catch {
+        // continue
+      }
+    }
+  }
+  return null;
+}
+
+// ── Slash commands ─────────────────────────────────────────────────
+
+function printHelp() {
+  console.log(`
+${G_GREEN}jawere — Terminal AI Coding Agent${R}
+
+${G_YELLOW}Commands:${R}
+  ${G_FG}/help${R}                    Show this help
+  ${G_FG}/key${R}                     Show API key status for current provider
+  ${G_FG}/key add${R}                 Add or change API key for current provider
+  ${G_FG}/key delete${R}              Delete saved API key
+  ${G_FG}/key list${R}                List all configured API keys (masked)
+  ${G_FG}/model${R}                   Show current model
+  ${G_FG}/model list${R}              List available models for current provider
+  ${G_FG}/model list all${R}          List all models across all providers
+  ${G_FG}/model switch <name>${R}     Switch to a different model
+  ${G_FG}/provider${R}                Show current provider
+  ${G_FG}/provider list${R}           List all providers
+  ${G_FG}/provider switch <name>${R}  Switch provider (updates model too)
+  ${G_FG}/setup${R}                   Run full setup wizard
+  ${G_FG}/clear${R}                   Clear screen
+  ${G_FG}/exit${R}, ${G_FG}/quit${R}             Quit
+  ${G_FG}/exit${R}, ${G_FG}/quit${R}             Quit
+`);
+}
+
+async function cmdKey(args: string[], config: Config): Promise<void> {
+  const sub = args[1] || "status";
+
+  switch (sub) {
+    case "status":
+    case "show": {
+      const savedKey = await loadKey();
+      if (savedKey) {
+        console.log(`${G_GREEN}●${R} API key saved for ${G_GREEN2}${config.provider}${R}`);
+        console.log(`  Key: ${G_DIM}${savedKey.slice(0, 4)}...${savedKey.slice(-3)}${R}`);
+        const saved = await loadSavedConfig();
+        if (saved) {
+          console.log(`  Model: ${G_FG}${saved.model || config.model}${R}`);
+          if (saved.baseURL) console.log(`  URL: ${G_DIM}${saved.baseURL}${R}`);
+        }
+      } else if (config.apiKey) {
+        console.log(`${G_GREEN}●${R} API key from environment variable`);
+        console.log(`  Key: ${G_DIM}${config.apiKey.slice(0, 4)}...${config.apiKey.slice(-3)}${R}`);
+      } else {
+        console.log(`${G_RED}✗${R} No API key configured`);
+        console.log(`  Use ${G_FG}/key add${R} to set one, or set ${G_DIM}AI_API_KEY${R}`);
+      }
+      break;
+    }
+
+    case "add":
+    case "set": {
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      const ask = (q: string): Promise<string> =>
+        new Promise((r) => rl.question(q, (a) => r(a.trim())));
+
+      console.log(`${G_YELLOW}Set API key for ${config.provider}:${R}`);
+      const keyHints: Record<string, string> = {
+        openai: "sk-", deepseek: "sk-", anthropic: "sk-ant-",
+        google: "", groq: "gsk_", xai: "xai-", mistral: "",
+        openrouter: "sk-or-", custom: "",
+      };
+      const hint = keyHints[config.provider] ?? "";
+      if (hint) console.log(`${G_DIM}Hint: keys usually start with "${hint}"${R}`);
+      const key = await ask("API Key: ");
+
+      if (!key) {
+        console.log(`${G_DIM}No key entered. Aborted.${R}`);
+        rl.close();
+        return;
+      }
+
+      await saveKey(key);
+      const model = await ask(`Model [${config.model}]: `);
+      if (model) {
+        await saveConfig({
+          provider: config.provider,
+          model: model || config.model,
+          baseURL: config.baseURL,
+        });
+      }
+      console.log(`${G_GREEN}✓ Key saved${R}`);
+      console.log(`${G_DIM}Restart to use the new key.${R}`);
+      rl.close();
+      break;
+    }
+
+    case "delete":
+    case "remove": {
+      const savedKey = await loadKey();
+      if (!savedKey) {
+        console.log(`${G_DIM}No key to delete.${R}`);
+        return;
+      }
+      await deleteKey();
+      console.log(`${G_GREEN}✓ Key deleted${R}`);
+      break;
+    }
+
+    case "list": {
+      const savedKey = await loadKey();
+      const saved = await loadSavedConfig();
+      if (savedKey && saved) {
+        console.log(`${G_GREEN}Saved keys:${R}`);
+        console.log(`  ${G_FG}${saved.provider}${R} — ${G_DIM}${savedKey.slice(0,4)}...${savedKey.slice(-3)}${R} (model: ${saved.model || "?"})`);
+      }
+      // Check env vars
+      const envKeys = [
+        "DEEPSEEK_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+        "GEMINI_API_KEY", "GROQ_API_KEY", "XAI_API_KEY",
+        "MISTRAL_API_KEY", "OPENROUTER_API_KEY", "AI_API_KEY",
+      ];
+      const found = envKeys.filter((k) => process.env[k]);
+      if (found.length > 0) {
+        console.log(`${G_YELLOW}Environment keys:${R}`);
+        for (const k of found) {
+          const v = process.env[k]!;
+          console.log(`  ${G_DIM}${k}${R} — ${v.slice(0,4)}...${v.slice(-3)}`);
+        }
+      }
+      if (!savedKey && found.length === 0) {
+        console.log(`${G_DIM}No keys configured.${R}`);
+      }
+      break;
+    }
+
+    default:
+      console.log(`${G_RED}Unknown key command:${R} ${sub}`);
+      console.log(`Try: ${G_FG}/key${R}, ${G_FG}/key add${R}, ${G_FG}/key delete${R}, ${G_FG}/key list${R}`);
+  }
+}
+
+async function cmdModel(args: string[], config: Config, modelsConfig: ModelsConfig | null, updateConfig: (c: Partial<Config>) => void): Promise<void> {
+  const sub = args[1] || "status";
+
+  switch (sub) {
+    case "status":
+    case "show":
+      console.log(`${G_GREEN}Current model:${R} ${G_FG}${config.model}${R}`);
+      console.log(`${G_GREEN}Provider:${R} ${G_FG}${config.provider}${R}`);
+      if (modelsConfig) {
+        const provider = modelsConfig.providers[config.provider];
+        if (provider) {
+          const modelEntry = provider.models.find((m) => m.id === config.model);
+          if (modelEntry) {
+            console.log(`  Context window: ${G_DIM}${(modelEntry.contextWindow / 1000).toFixed(0)}K tokens${R}`);
+          }
+        }
+      }
+      break;
+
+    case "list": {
+      const listAll = args[2] === "all";
+      if (!modelsConfig) {
+        console.log(`${G_RED}models.json not found${R}`);
+        return;
+      }
+
+      if (listAll) {
+        console.log(`${G_YELLOW}All providers and models:${R}\n`);
+        for (const [pid, pdata] of Object.entries(modelsConfig.providers)) {
+          const isCurrent = pid === config.provider;
+          const marker = isCurrent ? ` ${G_GREEN}◀ current${R}` : "";
+          console.log(`  ${G_FG}${pid}${R}${marker}`);
+          for (const m of pdata.models) {
+            const isActive = isCurrent && m.id === config.model;
+            const active = isActive ? ` ${G_GREEN}◀ active${R}` : "";
+            console.log(`    ${G_DIM}•${R} ${m.id} (${(m.contextWindow / 1000).toFixed(0)}K)${active}`);
+          }
+          console.log("");
+        }
+      } else {
+        const provider = modelsConfig.providers[config.provider];
+        if (!provider) {
+          console.log(`${G_RED}Provider ${config.provider} not found in models.json${R}`);
+          return;
+        }
+        console.log(`${G_YELLOW}Models for ${G_FG}${config.provider}${G_YELLOW}:${R}\n`);
+        for (const m of provider.models) {
+          const active = m.id === config.model ? ` ${G_GREEN}◀ active${R}` : "";
+          console.log(`  ${G_DIM}•${R} ${m.id} (${(m.contextWindow / 1000).toFixed(0)}K)${active}`);
+        }
+      }
+      break;
+    }
+
+    case "switch":
+    case "set": {
+      const targetModel = args[2];
+      if (!targetModel) {
+        console.log(`${G_RED}Usage:${R} /model switch <model-id>`);
+        console.log(`Use ${G_FG}/model list${R} to see available models`);
+        return;
+      }
+
+      if (!modelsConfig) {
+        console.log(`${G_RED}models.json not found — cannot validate model${R}`);
+        console.log(`Switching anyway...`);
+        // Save blindly
+        await saveConfig({
+          provider: config.provider,
+          model: targetModel,
+          baseURL: config.baseURL === "https://api.openai.com/v1" && config.provider === "deepseek"
+            ? "https://api.deepseek.com/v1" : config.baseURL,
+        });
+        updateConfig({ model: targetModel });
+        console.log(`${G_GREEN}✓ Switched to ${targetModel}${R}`);
+        console.log(`${G_DIM}Restart to apply this change.${R}`);
+        return;
+      }
+
+      const provider = modelsConfig.providers[config.provider];
+      if (!provider) {
+        console.log(`${G_YELLOW}Provider ${config.provider} not in models.json — saving anyway${R}`);
+      } else {
+        const exists = provider.models.some((m) => m.id === targetModel);
+        if (!exists) {
+          console.log(`${G_YELLOW}Warning:${R} "${targetModel}" not listed for ${config.provider} in models.json`);
+          console.log(`${G_DIM}Proceeding anyway...${R}`);
+        }
+      }
+
+      await saveConfig({
+        provider: config.provider as SavedConfig["provider"],
+        model: targetModel,
+        baseURL: provider?.baseURL || config.baseURL,
+      });
+      updateConfig({ model: targetModel });
+      console.log(`${G_GREEN}✓ Model switched to ${G_FG}${targetModel}${R}`);
+      console.log(`${G_DIM}Restart jawere to apply the change.${R}`);
+      break;
+    }
+
+    default:
+      console.log(`${G_RED}Unknown model command:${R} ${sub}`);
+      console.log(`Try: ${G_FG}/model${R}, ${G_FG}/model list${R}, ${G_FG}/model switch <name>${R}`);
+  }
+}
+
+async function cmdProvider(args: string[], config: Config, modelsConfig: ModelsConfig | null): Promise<void> {
+  const sub = args[1] || "status";
+
+  switch (sub) {
+    case "status":
+    case "show":
+      console.log(`${G_GREEN}Current provider:${R} ${G_FG}${config.provider}${R}`);
+      if (modelsConfig) {
+        const p = modelsConfig.providers[config.provider];
+        if (p) {
+          console.log(`  Base URL: ${G_DIM}${p.baseURL}${R}`);
+          console.log(`  Models: ${p.models.length} available`);
+          const current = p.models.find((m) => m.id === config.model);
+          if (current) {
+            console.log(`  Active model: ${G_FG}${current.id}${R} (${(current.contextWindow / 1000).toFixed(0)}K)`);
+          }
+        }
+      }
+      break;
+
+    case "list": {
+      if (!modelsConfig) {
+        console.log(`${G_RED}models.json not found${R}`);
+        return;
+      }
+      console.log(`${G_YELLOW}Available providers:${R}\n`);
+      for (const [id, pdata] of Object.entries(modelsConfig.providers)) {
+        const active = id === config.provider ? ` ${G_GREEN}◀ current${R}` : "";
+        console.log(`  ${G_DIM}•${R} ${G_FG}${id}${R} (${pdata.models.length} models) — ${G_DIM}${pdata.baseURL}${R}${active}`);
+      }
+      break;
+    }
+
+    case "switch":
+    case "set": {
+      const target = args[2];
+      if (!target) {
+        console.log(`${G_RED}Usage:${R} /provider switch <provider-id>`);
+        console.log(`Use ${G_FG}/provider list${R} to see all providers`);
+        return;
+      }
+
+      if (modelsConfig && !modelsConfig.providers[target]) {
+        console.log(`${G_RED}Provider "${target}" not found in models.json${R}`);
+        console.log(`Available: ${Object.keys(modelsConfig.providers).join(", ")}`);
+        return;
+      }
+
+      const pdata = modelsConfig?.providers[target];
+      const defaultModel = pdata?.models[0]?.id || "gpt-4o";
+      const baseURL = pdata?.baseURL || config.baseURL;
+
+      await saveConfig({
+        provider: target as SavedConfig["provider"],
+        model: defaultModel,
+        baseURL,
+      });
+      console.log(`${G_GREEN}✓ Provider switched to ${G_FG}${target}${R} (model: ${defaultModel})`);
+      console.log(`${G_YELLOW}Note:${R} You may need to set an API key with ${G_FG}/key add${R}`);
+      console.log(`${G_DIM}Restart jawere to apply the change.${R}`);
+      break;
+    }
+
+    default:
+      console.log(`${G_RED}Unknown provider command:${R} ${sub}`);
+      console.log(`Try: ${G_FG}/provider${R}, ${G_FG}/provider list${R}, ${G_FG}/provider switch <id>${R}`);
+  }
+}
+
+// ── Setup wizard ────────────────────────────────────────────────────
+
+async function setupWizard(): Promise<void> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  const ask = (q: string): Promise<string> =>
+    new Promise((resolve) => rl.question(q, (a) => resolve(a.trim())));
+
+  console.log("");
+  console.log(`${G_GREEN}╔══════════════════════════════════════════╗${R}`);
+  console.log(`${G_GREEN}║   jawere — Setup                         ║${R}`);
+  console.log(`${G_GREEN}╚══════════════════════════════════════════╝${R}`);
+  console.log("");
+
+  // Load models config for better defaults
+  const modelsConfig = await loadModelsConfig();
+
+  console.log("Select AI provider:");
+  const providers = modelsConfig
+    ? Object.keys(modelsConfig.providers)
+    : ["deepseek", "openai", "anthropic", "google", "groq", "xai", "mistral", "openrouter", "custom"];
+  providers.forEach((p, i) => {
+    console.log(`  ${G_GREEN2}${i + 1}.${R} ${p}`);
+  });
+  console.log("");
+
+  const choice = await ask(`Choice [1]: `);
+  const idx = (parseInt(choice) || 1) - 1;
+  const provider = providers[Math.max(0, Math.min(idx, providers.length - 1))] || "deepseek";
+
+  let baseURL = modelsConfig?.providers[provider]?.baseURL;
+  let defaultModel = modelsConfig?.providers[provider]?.models[0]?.id || "gpt-4o";
+
+  if (provider === "custom") {
+    console.log("");
+    baseURL = await ask("Base URL (e.g. https://api.openai.com/v1): ");
+    if (!baseURL) {
+      console.log("No URL entered. Aborting.");
+      rl.close();
+      return;
+    }
+  }
+
+  console.log("");
+  const keyHints: Record<string, string> = {
+    openai: "sk-", deepseek: "sk-", anthropic: "sk-ant-",
+    google: "", groq: "gsk_", xai: "xai-", mistral: "",
+    openrouter: "sk-or-", custom: "",
+  };
+  const keyHint = keyHints[provider] ?? "";
+  const hintText = keyHint ? ` (starts with ${keyHint})` : "";
+  console.log(`Enter your API key${hintText}:`);
+  const key = await ask("API Key: ");
+  if (!key) {
+    console.log("No key entered. Aborting.");
+    rl.close();
+    return;
+  }
+
+  // Show available models
+  const models = modelsConfig?.providers[provider]?.models;
+  if (models && models.length > 0) {
+    console.log(`\n${G_DIM}Available models for ${provider}:${R}`);
+    models.forEach((m) => {
+      console.log(`  ${G_DIM}•${R} ${m.id} (${(m.contextWindow / 1000).toFixed(0)}K)`);
+    });
+  }
+  console.log("");
+  const model = await ask(`Model [${defaultModel}]: `);
+
+  await saveKey(key);
+  await saveConfig({
+    provider: provider as SavedConfig["provider"],
+    baseURL: baseURL || undefined,
+    model: model || defaultModel,
+  });
+
+  console.log("");
+  console.log(`${G_GREEN}Setup complete!${R}`);
+  console.log(`  Provider : ${G_GREEN2}${provider}${R}`);
+  console.log(`  Model    : ${G_GREEN2}${model || defaultModel}${R}`);
+  console.log(`  Key saved: ~/.jawere/key.enc`);
+  console.log("");
+
+  rl.close();
+}
+
+// ── Quick update ────────────────────────────────────────────────────
+
+async function quickUpdate(): Promise<void> {
+  const { execSync } = await import("child_process");
+
+  console.log(`${G_GREEN}╔══════════════════════════════════════════╗${R}`);
+  console.log(`${G_GREEN}║   jawere — Quick Update                  ║${R}`);
+  console.log(`${G_GREEN}╚══════════════════════════════════════════╝${R}\n`);
+
+  let isGlobal = false;
+  try {
+    execSync("npm list -g @jawere/coding-agent", { encoding: "utf-8", stdio: "pipe" });
+    isGlobal = true;
+  } catch {}
+
+  const installCmd = isGlobal
+    ? "npm install -g @jawere/coding-agent@latest"
+    : "npm install @jawere/coding-agent@latest";
+
+  console.log(`${G_GRAY}── Updating @jawere/coding-agent to latest ──${R}`);
+  console.log(`${G_DIM}→ ${installCmd}${R}`);
+
+  try {
+    const out = execSync(installCmd, { encoding: "utf-8", stdio: "pipe" });
+    if (out.trim()) console.log(out.trim());
+  } catch (e: any) {
+    console.error(`${G_GREEN2}✗${R} ${e.stderr || e.message}`);
+    process.exit(1);
+  }
+
+  try {
+    const ver = execSync("jawere --version 2>/dev/null || npx jawere --version 2>/dev/null", {
+      encoding: "utf-8", stdio: "pipe",
+    }).trim();
+    console.log(`\n${G_GREEN}✓ Updated to ${ver || "latest"}${R}`);
+  } catch {
+    console.log(`\n${G_GREEN}✓ Update complete!${R}`);
+  }
+}
+
+// ── Main ────────────────────────────────────────────────────────────
+
+async function main(): Promise<void> {
+  const setupMode = process.argv.includes("--setup");
+  const updateMode = process.argv.includes("--update");
+
+  if (setupMode) {
+    await setupWizard();
+    console.log("Setup complete. Run again without --setup to start.");
+    process.exit(0);
+  }
+
+  if (updateMode) {
+    await quickUpdate();
+    process.exit(0);
+  }
+
+  const config = await loadConfig();
+  const modelsConfig = await loadModelsConfig();
+
+  // Apply models.json defaults if config has no saved config
+  if (modelsConfig && !config.apiKey) {
+    // Check if any env key matches a provider in models.json
+    for (const [pid, pdata] of Object.entries(modelsConfig.providers)) {
+      if (process.env[pdata.envKey]) {
+        process.env.AI_API_KEY = process.env[pdata.envKey];
+        break;
+      }
+    }
+  }
+
+  if (!config.apiKey) {
+    // Re-load config after potential env fix
+    const reloaded = await loadConfig();
+    if (!reloaded.apiKey) {
+      console.log("╔══════════════════════════════════════════╗");
+      console.log("║        jawere — AI Coding Agent          ║");
+      console.log("╠══════════════════════════════════════════╣");
+      console.log("║ No API key found.                        ║");
+      console.log("║                                          ║");
+      console.log("║ Option 1: Set AI_API_KEY env var         ║");
+      console.log("║ Option 2: Run jawere --setup             ║");
+      console.log("║                                          ║");
+      console.log("╚══════════════════════════════════════════╝");
+      process.exit(1);
+    }
+  }
+
+  console.clear();
+  printBanner(config);
+
+  // Phase 1: Background scan
+  process.stderr.write(`${G_DIM}Scanning codebase…${R}`);
+  try {
+    const scanResult = await runScanner(config.workDir);
+    if (scanResult.cached) {
+      process.stderr.write(` ${G_DIM}(${scanResult.fileCount} files cached)${R}\n`);
+    } else {
+      process.stderr.write(` ${G_GREEN2}done${R} ${G_DIM}· ${scanResult.fileCount} files indexed${R}\n`);
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(` ${G_DIM}[skipped: ${msg}]${R}\n`);
+  }
+
+  // Phase 2: Setup .codebase directory
+  try {
+    const codebaseDir = resolve(config.workDir, ".codebase");
+    await mkdir(codebaseDir, { recursive: true });
+  } catch { /* best effort */ }
+
+  // Phase 3: Check for AGENT_DOCS.md and print tip
+  const agentDocsPath = resolve(config.workDir, ".codebase", "AGENT_DOCS.md");
+  if (existsSync(agentDocsPath)) {
+    process.stderr.write(`${G_DIM}Agent self-docs: .codebase/AGENT_DOCS.md${R}\n`);
+  }
+
+  // Load file list for @-tag autocomplete
+  const fileList = await loadFileList(config.workDir);
+
+  const { prompt, enableBracketedPaste, disableBracketedPaste } = createPrompt({
+    getFiles: () => fileList,
+  });
+  enableBracketedPaste();
+
+  // Mutable config that can be updated by slash commands
+  let currentConfig = { ...config };
+  // Reload config after key changes
+  const reloadConfig = async (): Promise<Config> => {
+    // bust cached config
+    const fresh = await loadConfig();
+    currentConfig = { ...fresh };
+    return fresh;
+  };
+
+  let runningAbort: AbortController | null = null;
+  let agent: PersistentAgent | null = null;
+  const displayState: DisplayState = {
+    spinner: createSpinner(),
+    pendingToolArgs: new Map(),
+    toolCount: 0,
+  };
+  let sigintCount = 0;
+  const sigintHandler = () => {
+    sigintCount++;
+    if (sigintCount >= 2) {
+      agent?.abort();
+      process.stderr.write("\n");
+      process.exit(1);
+    }
+    if (runningAbort) {
+      runningAbort.abort();
+      agent?.abort();
+      process.stderr.write("\n");
+    }
+    setTimeout(() => { sigintCount = 0; }, 1000);
+  };
+  process.on("SIGINT", sigintHandler);
+
+  while (true) {
+    const input = await prompt();
+    if (!input) continue;
+
+    if (input.startsWith("/")) {
+      const parts = input.slice(1).split(/\s+/);
+      const cmd = parts[0].toLowerCase();
+
+      switch (cmd) {
+        case "help":
+          printHelp();
+          break;
+
+        case "key":
+          await cmdKey(parts, currentConfig);
+          break;
+
+        case "model":
+          await cmdModel(parts, currentConfig, modelsConfig, async (update) => {
+            Object.assign(currentConfig, update);
+            // Restart agent with new model
+            agent = null;
+          });
+          break;
+
+        case "provider":
+          await cmdProvider(parts, currentConfig, modelsConfig);
+          // Provider switch needs fresh agent
+          agent = null;
+          break;
+
+        case "setup":
+          await setupWizard();
+          console.log(`${G_YELLOW}Restart jawere to use the new configuration.${R}`);
+          break;
+
+        case "clear":
+          console.clear();
+          printBanner(currentConfig);
+          break;
+
+        case "config": {
+          console.log(`${G_YELLOW}Current configuration:${R}`);
+          console.log(`  Provider: ${G_FG}${currentConfig.provider}${R}`);
+          console.log(`  Model: ${G_FG}${currentConfig.model}${R}`);
+          console.log(`  Base URL: ${G_DIM}${currentConfig.baseURL}${R}`);
+          console.log(`  Work Dir: ${G_DIM}${currentConfig.workDir}${R}`);
+          console.log(`  Key from: ${currentConfig.keyFromFile ? "encrypted file" : "env variable"}`);
+          console.log(`  Dev mode: ${currentConfig.isDev ? "ON" : "OFF"}`);
+          break;
+        }
+
+        case "exit":
+        case "quit":
+          console.log("Goodbye!");
+          disableBracketedPaste();
+          process.exit(0);
+
+        default:
+          console.log(`${G_RED}Unknown command:${R} /${cmd}`);
+          console.log(`Type ${G_FG}/help${R} for available commands.`);
+      }
+      continue;
+    }
+
+    try {
+      runningAbort = new AbortController();
+
+      // (Re)create agent if needed (lazy init on first prompt or after model switch)
+      if (!agent) {
+        agent = new PersistentAgent(currentConfig);
+        agent.subscribe(createDisplaySubscriber(displayState));
+      }
+
+      await agent.prompt(input, runningAbort.signal);
+      runningAbort = null;
+
+
+    } catch (err: unknown) {
+      runningAbort = null;
+      agent = null;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`\n${G_RED}Error:${R} ${msg}`);
+    }
+  }
+}
+
+main().catch((err) => {
+  console.error("Fatal error:", err);
+  process.exit(1);
+});

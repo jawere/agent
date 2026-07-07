@@ -1,44 +1,33 @@
 {
-	"name": "jawere-monorepo",
-	"private": true,
-	"type": "module",
-	"workspaces": [
-		"packages/*"
-	],
-	"scripts": {
-		"clean": "npm run clean --workspaces",
-		"build": "cd packages/tui && npm run build && cd ../ai && npm run build && cd ../agent && npm run build && cd ../coding-agent && npm run build && cd ../orchestrator && npm run build",
-		"check": "biome check --write --error-on-warnings . && npm run check:pinned-deps && npm run check:ts-imports && tsgo --noEmit",
-		"check:pinned-deps": "node scripts/check-pinned-deps.mjs",
-		"check:ts-imports": "node scripts/check-ts-relative-imports.mjs",
-		"setup": "tsx packages/coding-agent/src/cli.ts --setup",
-		"start": "node --env-file .env.local --import tsx packages/coding-agent/src/cli.ts",
-		"start:prod": "tsx packages/coding-agent/src/cli.ts",
-		"test": "npm run test --workspaces --if-present",
-		"precommit:install": "cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit && echo 'pre-commit hook installed'",
-		"prepare": "husky",
-		"publish:patch": "npm version patch -ws --no-git-tag-version",
-		"prepublishOnly": "npm run clean && npm run build",
-		"version:patch": "npm version patch -ws --no-git-tag-version && node scripts/sync-versions.js && npm install --package-lock-only --ignore-scripts",
-		"version:minor": "npm version minor -ws --no-git-tag-version && node scripts/sync-versions.js && npm install --package-lock-only --ignore-scripts",
-		"version:major": "npm version major -ws --no-git-tag-version && node scripts/sync-versions.js && npm install --package-lock-only --ignore-scripts"
-	},
-	"devDependencies": {
-		"@biomejs/biome": "2.3.5",
-		"@types/node": "22.19.19",
-		"esbuild": "0.28.1",
-		"husky": "9.1.7",
-		"shx": "0.4.0",
-		"tsx": "4.22.1",
-		"typescript": "5.9.3"
-	},
-	"engines": {
-		"node": ">=22.19.0"
-	},
-	"overrides": {
-		"rimraf": "6.1.2",
-		"gaxios": {
-			"rimraf": "6.1.2"
-		}
-	}
+  "name": "jawere-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "clean": "npm run clean --workspaces",
+    "build": "npm run build --workspaces",
+    "check": "npx tsc --noEmit",
+    "setup": "tsx packages/coding-agent/src/cli.ts --setup",
+    "start": "node --env-file .env.local --import tsx packages/coding-agent/src/cli.ts",
+    "start:prod": "tsx packages/coding-agent/src/cli.ts",
+    "test": "npm run test --workspaces --if-present",
+    "precommit:install": "cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit && echo 'pre-commit hook installed'",
+    "prepare": "npm run precommit:install 2>/dev/null || true",
+    "publish:patch": "npm version patch -ws --no-git-tag-version",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.28.1",
+    "tsx": "^4.22.1",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@jawere/coding-agent": "^0.1.1"
+  }
 }

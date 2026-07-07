@@ -1,201 +1,118 @@
-import { type ChildProcess, spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
-import type {
-	AgentSessionEvent,
-	RpcCommand,
-	RpcExtensionUIRequest,
-	RpcExtensionUIResponse,
-	RpcResponse,
-} from "@jawere/coding-agent";
-import { isBunBinary } from "./config.ts";
+// @jawere/orchestrator — RPC process management (spawn child agent processes)
 
-interface PendingRequest {
-	resolve(response: RpcResponse): void;
-	reject(error: Error): void;
+import { ChildProcess, spawn } from "child_process";
+import { randomBytes } from "crypto";
+import type { RpcRequest, RpcResponse } from "./types.ts";
+
+export interface RpcProcessOptions {
+  command: string;
+  args?: string[];
+  cwd?: string;
+  env?: Record<string, string>;
+  timeout?: number;
 }
 
-const require = createRequire(import.meta.url);
+export class RpcProcess {
+  private process: ChildProcess | null = null;
+  private pending = new Map<
+    string,
+    { resolve: (value: unknown) => void; reject: (err: Error) => void }
+  >();
+  private buffer = "";
+  private options: RpcProcessOptions;
+  private timeout: number;
 
-function toError(error: unknown): Error {
-	return error instanceof Error ? error : new Error(String(error));
-}
+  constructor(options: RpcProcessOptions) {
+    this.options = options;
+    this.timeout = options.timeout ?? 30000;
+  }
 
-export class RpcProcessInstance {
-	readonly process: ChildProcess;
+  start(): void {
+    if (this.process) return;
 
-	private exited = false;
-	private nextRequestId = 0;
-	private stdoutBuffer = "";
-	private stderrBuffer = "";
-	private readonly pendingRequests = new Map<string, PendingRequest>();
-	private readonly eventListeners = new Set<(event: AgentSessionEvent) => void>();
-	private readonly exitListeners = new Set<(error?: Error) => void>();
-	private uiRequestHandler: ((request: RpcExtensionUIRequest) => void) | undefined;
+    this.process = spawn(this.options.command, this.options.args ?? [], {
+      cwd: this.options.cwd,
+      env: { ...process.env, ...this.options.env },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
 
-	constructor(options: { cwd: string }) {
-		const rpcCommand = this.getSpawnCommand();
-		this.process = spawn(rpcCommand.command, rpcCommand.args, {
-			cwd: options.cwd,
-			env: process.env,
-			stdio: ["pipe", "pipe", "pipe"],
-		});
-		if (!this.process.stdin || !this.process.stdout) {
-			throw new Error("Failed to create RPC process stdio");
-		}
-		this.attachListeners();
-	}
+    this.process.stdout?.on("data", (data: Buffer) => {
+      this.buffer += data.toString();
+      this.processBuffer();
+    });
 
-	private getSpawnCommand(): { command: string; args: string[] } {
-		if (isBunBinary) {
-			return {
-				command: join(dirname(process.execPath), process.platform === "win32" ? "pi.exe" : "pi"),
-				args: ["--mode", "rpc"],
-			};
-		}
-		return {
-			command: process.execPath,
-			args: [require.resolve("@jawere/coding-agent/rpc-entry")],
-		};
-	}
+    this.process.stderr?.on("data", (data: Buffer) => {
+      // Forward stderr to parent for debugging
+      process.stderr.write(`[rpc-child stderr] ${data.toString()}`);
+    });
 
-	private attachListeners(): void {
-		this.process.stdout?.setEncoding("utf8");
-		this.process.stdout?.on("data", (chunk: string) => {
-			this.stdoutBuffer += chunk;
-			while (true) {
-				const newlineIndex = this.stdoutBuffer.indexOf("\n");
-				if (newlineIndex === -1) {
-					break;
-				}
-				const line = this.stdoutBuffer.slice(0, newlineIndex).trim();
-				this.stdoutBuffer = this.stdoutBuffer.slice(newlineIndex + 1);
-				if (!line) {
-					continue;
-				}
-				this.handleLine(line);
-			}
-		});
+    this.process.on("exit", (code) => {
+      // Reject all pending requests
+      for (const [, { reject }] of this.pending) {
+        reject(new Error(`Child process exited with code ${code}`));
+      }
+      this.pending.clear();
+      this.process = null;
+    });
+  }
 
-		this.process.stderr?.setEncoding("utf8");
-		this.process.stderr?.on("data", (chunk: string) => {
-			this.stderrBuffer += chunk;
-		});
+  async call(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
+    if (!this.process) {
+      this.start();
+    }
 
-		this.process.once("error", (error) => {
-			this.exited = true;
-			const wrapped = new Error(`RPC process error: ${error.message}. Stderr: ${this.stderrBuffer}`);
-			this.rejectAllPending(wrapped);
-			this.notifyExit(wrapped);
-		});
+    const id = randomBytes(8).toString("hex");
+    const request: RpcRequest = { id, method, params };
 
-		this.process.once("exit", (code, signal) => {
-			this.exited = true;
-			const error = new Error(`RPC process exited (code=${code} signal=${signal}). Stderr: ${this.stderrBuffer}`);
-			this.rejectAllPending(error);
-			this.notifyExit(error);
-		});
-	}
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`RPC call timed out: ${method}`));
+      }, this.timeout);
 
-	private handleLine(line: string): void {
-		const parsed = JSON.parse(line) as { type?: string; id?: string };
-		switch (parsed.type) {
-			case "response": {
-				if (!parsed.id) {
-					return;
-				}
-				const pending = this.pendingRequests.get(parsed.id);
-				if (!pending) {
-					return;
-				}
-				this.pendingRequests.delete(parsed.id);
-				pending.resolve(parsed as RpcResponse);
-				return;
-			}
+      this.pending.set(id, {
+        resolve: (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        reject: (err) => {
+          clearTimeout(timer);
+          reject(err);
+        },
+      });
 
-			case "extension_ui_request": {
-				this.uiRequestHandler?.(parsed as RpcExtensionUIRequest);
-				return;
-			}
+      this.process!.stdin!.write(JSON.stringify(request) + "\n");
+    });
+  }
 
-			default: {
-				for (const listener of this.eventListeners) {
-					listener(parsed as AgentSessionEvent);
-				}
-			}
-		}
-	}
+  private processBuffer(): void {
+    const lines = this.buffer.split("\n");
+    this.buffer = lines.pop() ?? "";
 
-	private rejectAllPending(error: Error): void {
-		for (const [id, pending] of this.pendingRequests) {
-			this.pendingRequests.delete(id);
-			pending.reject(error);
-		}
-	}
+    for (const line of lines) {
+      if (!line.trim()) continue;
 
-	private notifyExit(error?: Error): void {
-		for (const listener of this.exitListeners) {
-			listener(error);
-		}
-	}
+      try {
+        const response: RpcResponse = JSON.parse(line);
+        const pending = this.pending.get(response.id);
+        if (pending) {
+          this.pending.delete(response.id);
+          if (response.error) {
+            pending.reject(new Error(response.error.message));
+          } else {
+            pending.resolve(response.result);
+          }
+        }
+      } catch {
+        // Skip malformed lines
+      }
+    }
+  }
 
-	send(command: RpcCommand): Promise<RpcResponse> {
-		if (this.exited) {
-			throw new Error(`RPC process is not running. Stderr: ${this.stderrBuffer}`);
-		}
-		const id = command.id ?? `orchestrator_${++this.nextRequestId}_${randomUUID()}`;
-		const fullCommand = { ...command, id };
-		return new Promise<RpcResponse>((resolve, reject) => {
-			this.pendingRequests.set(id, { resolve, reject });
-			this.process.stdin?.write(`${JSON.stringify(fullCommand)}\n`, (error) => {
-				if (!error) {
-					return;
-				}
-				this.pendingRequests.delete(id);
-				reject(toError(error));
-			});
-		});
-	}
-
-	handleUiResponse(response: RpcExtensionUIResponse): void {
-		if (this.exited) {
-			return;
-		}
-		this.process.stdin?.write(`${JSON.stringify(response)}\n`);
-	}
-
-	setUiRequestHandler(handler?: (request: RpcExtensionUIRequest) => void): void {
-		this.uiRequestHandler = handler;
-	}
-
-	onEvent(listener: (event: AgentSessionEvent) => void): () => void {
-		this.eventListeners.add(listener);
-		return () => {
-			this.eventListeners.delete(listener);
-		};
-	}
-
-	onExit(listener: (error?: Error) => void): () => void {
-		this.exitListeners.add(listener);
-		return () => {
-			this.exitListeners.delete(listener);
-		};
-	}
-
-	async dispose(): Promise<void> {
-		this.uiRequestHandler = undefined;
-		this.rejectAllPending(new Error("RPC process disposed"));
-		if (this.exited) {
-			return;
-		}
-		this.process.kill("SIGTERM");
-		await new Promise<void>((resolve) => {
-			this.process.once("exit", () => resolve());
-		});
-	}
-}
-
-export function createRpcProcessInstance(options: { cwd: string }): RpcProcessInstance {
-	return new RpcProcessInstance(options);
+  stop(): void {
+    if (this.process) {
+      this.process.kill();
+      this.process = null;
+    }
+  }
 }

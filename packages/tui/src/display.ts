@@ -142,15 +142,142 @@ export function writeToolLine(name: string, args: Record<string, unknown>, isErr
 }
 
 /**
- * Write the final assistant response to stdout as plain text.
- * No ANSI colors, no horizontal separators, no formatting.
+ * Render markdown-ish assistant response to stdout with Gruvbox theme colors.
+ * Supports headings (#), bold (**), italic (*), inline code (`),
+ * code blocks (```), bullet lists (-), horizontal rules (---), and links.
  */
+/** Track whether we've already written the leading newline for this turn. */
+let _responseNewlineWritten = false;
+
+/** Reset the newline tracker (call at start of each turn). */
+export function resetResponseNewline(): void {
+  _responseNewlineWritten = false;
+}
+
 export function writeAssistantResponse(text: string): void {
   if (!text.trim()) return;
 
+  // Only emit one leading newline per turn, on stderr to stay below the spinner
+  if (!_responseNewlineWritten) {
+    process.stderr.write("\n");
+    _responseNewlineWritten = true;
+  }
+
+  const rendered = renderMarkdown(text);
+  process.stdout.write(rendered);
   process.stdout.write("\n");
-  process.stdout.write(text);
-  process.stdout.write("\n\n");
+}
+
+// ── Markdown renderer ─────────────────────────────────────────────
+
+/**
+ * Render a markdown string to terminal with Gruvbox-appropriate ANSI styling.
+ * This is a simple line-by-line renderer — no AST, robust enough for LLM output.
+ */
+function renderMarkdown(text: string): string {
+  // Detect fenced code blocks first
+  const lines = text.split("\n");
+  const out: string[] = [];
+  let inCodeBlock = false;
+  let codeBlockLang = "";
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+
+    // Fenced code block start/end
+    const fenceMatch = line.trim().match(/^(`{3,})(\S*)$/);
+    if (fenceMatch && !inCodeBlock) {
+      inCodeBlock = true;
+      codeBlockLang = fenceMatch[2];
+      out.push(G_DIM + "┌─" + G_GRAY + (codeBlockLang ? ` ${codeBlockLang} ` : "") + G_DIM + "─".repeat(Math.max(0, 40 - (codeBlockLang ? codeBlockLang.length + 2 : 0))) + RESET);
+      continue;
+    }
+    if (fenceMatch && inCodeBlock) {
+      inCodeBlock = false;
+      out.push(G_DIM + "└" + "─".repeat(40) + RESET);
+      continue;
+    }
+
+    if (inCodeBlock) {
+      out.push(G_GRAY + " │ " + G_FG0 + line + RESET);
+      continue;
+    }
+
+    // Horizontal rule
+    if (/^(?:---|___|\*\*\*)\s*$/.test(line.trim())) {
+      out.push(G_DIM + "─".repeat(Math.min(process.stdout.columns || 60, 60)) + RESET);
+      continue;
+    }
+
+    // Headings
+    if (line.startsWith("### ")) {
+      out.push(BOLD + G_YELLOW + line.slice(4).trim() + RESET);
+      continue;
+    }
+    if (line.startsWith("## ")) {
+      out.push(BOLD + G_ORANGE + line.slice(3).trim() + RESET);
+      continue;
+    }
+    if (line.startsWith("# ")) {
+      out.push(BOLD + G_RED + line.slice(2).trim() + RESET);
+      continue;
+    }
+
+    // Blockquote
+    if (line.startsWith("> ")) {
+      const content = line.slice(2);
+      out.push(G_DIM + "▎" + RESET + " " + G_GRAY + renderInline(content) + RESET);
+      continue;
+    }
+
+    // Bullet list
+    if (/^\s*[-*+]\s+/.test(line)) {
+      const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+      const content = line.replace(/^\s*[-*+]\s+/, "");
+      const prefix = " ".repeat(indent) + G_GREEN2 + "•" + RESET + " ";
+      out.push(prefix + renderInline(content));
+      continue;
+    }
+
+    // Numbered list
+    if (/^\s*\d+\.\s+/.test(line)) {
+      const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+      const num = line.match(/^\s*(\d+)\./)?.[1] ?? "";
+      const content = line.replace(/^\s*\d+\.\s+/, "");
+      const prefix = " ".repeat(indent) + G_GREEN2 + num + "." + RESET + " ";
+      out.push(prefix + renderInline(content));
+      continue;
+    }
+
+    // Regular line with inline formatting
+    out.push(renderInline(line));
+  }
+
+  return out.join("\n");
+}
+
+/**
+ * Render inline markdown within a single line.
+ * Handles: **bold**, *italic*, `code`, [links](url), ~~strikethrough~~
+ */
+function renderInline(line: string): string {
+  let result = line;
+
+  // Bold+italic ***
+  result = result.replace(/\*\*\*(.+?)\*\*\*/g, BOLD + G_FG0 + "$1" + RESET);
+  // Bold **
+  result = result.replace(/\*\*(.+?)\*\*/g, BOLD + G_FG0 + "$1" + RESET);
+  // Italic * (but not bullet markers)
+  result = result.replace(/(?<!\w)\*(.+?)\*(?!\w)/g, G_FG0 + "$1" + RESET);
+  result = result.replace(/(?<!\w)_(.+?)_(?!\w)/g, G_FG0 + "$1" + RESET);
+  // Inline code `
+  result = result.replace(/`([^`]+)`/g, G_GREEN + "$1" + RESET);
+  // Strikethrough ~~
+  result = result.replace(/~~(.+?)~~/g, G_DIM + "$1" + RESET);
+  // Links [text](url) — show text, dim url
+  result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, G_BLUE + "$1" + RESET + " " + G_DIM + "($2)" + RESET);
+
+  return result;
 }
 
 /**

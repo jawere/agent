@@ -18,6 +18,17 @@ const externals = [
   "@google/generative-ai",
 ];
 
+// Mark ALL Node built-ins as external so esbuild doesn't try to bundle/polyfill them
+const nodeBuiltins = [
+  "assert", "async_hooks", "buffer", "child_process", "cluster", "console",
+  "constants", "crypto", "dgram", "diagnostics_channel", "dns", "domain",
+  "events", "fs", "fs/promises", "http", "http2", "https", "inspector",
+  "module", "net", "os", "path", "perf_hooks", "process", "punycode",
+  "querystring", "readline", "repl", "stream", "string_decoder", "timers",
+  "tls", "trace_events", "tty", "url", "util", "v8", "vm", "wasi",
+  "worker_threads", "zlib",
+];
+
 // CLI binary
 await esbuild.build({
   entryPoints: [resolve(root, "packages/coding-agent/src/cli.ts")],
@@ -26,7 +37,7 @@ await esbuild.build({
   target: "node22",
   format: "esm",
   outfile: resolve(outDir, "cli.js"),
-  external: externals,
+  external: [...externals, ...nodeBuiltins],
   sourcemap: false,
   minify: false,
   banner: { js: "#!/usr/bin/env node" },
@@ -40,7 +51,7 @@ await esbuild.build({
   target: "node22",
   format: "esm",
   outfile: resolve(outDir, "index.js"),
-  external: externals,
+  external: [...externals, ...nodeBuiltins],
   sourcemap: false,
   minify: false,
 });

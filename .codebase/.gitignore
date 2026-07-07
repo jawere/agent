@@ -1,8 +1,0 @@
-# .codebase — scanner cache directory
-# tree.yaml is committed (serves as documentation)
-# meta.json is generated per-machine, don't commit
-# checksums.json is generated per-machine, don't commit
-# state.md is session-local working memory, don't commit
-meta.json
-checksums.json
-state.md
