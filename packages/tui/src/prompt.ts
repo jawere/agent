@@ -60,11 +60,13 @@ function multilinePrompt(opts?: PromptOptions): Promise<string> {
 
     // Wire autocomplete: / commands + @ file paths (fs-based)
     const slashCommands: SlashCommand[] = opts?.commands ?? [];
-    if (slashCommands.length > 0) {
+    const getFiles = opts?.getFiles;
+    if (slashCommands.length > 0 || getFiles) {
       const provider = new CombinedAutocompleteProvider(
         slashCommands,
         opts?.basePath ?? process.cwd(),
-        null, // fdPath — use built-in fs scanning
+        null, // fdPath — use in-memory file list fallback
+        getFiles, // fileListProvider — jawere's scanner cache
       );
       editor.setAutocompleteProvider(provider);
     }

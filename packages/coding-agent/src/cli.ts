@@ -12,6 +12,7 @@ import {
   deleteKey,
   loadSavedConfig,
   type SavedConfig,
+  type SavedProvider,
 } from "./crypto.js";
 import { createPrompt } from "@jawere/tui";
 import { runScanner, loadFileList } from "./scanner.js";
@@ -19,6 +20,7 @@ import { type DisplayState, createDisplaySubscriber } from "./agent-runner.js";
 import { PiRpcAgent, type ExtensionUIHandler, type ExtensionUIRequest, type ExtensionUIResponse } from "./pi-rpc-agent.js";
 import type { SlashCommand } from "@jawere/pi-tui";
 import { resolvePiBinary, getPiInstallInstructions, type PiInfo } from "./pi-resolver.js";
+import { buildSystemPrompt } from "./system-prompt.js";
 import { createSpinner } from "@jawere/tui";
 
 // Gruvbox dark palette
@@ -236,7 +238,13 @@ async function cmdKey(args: string[], config: Config): Promise<void> {
   }
 }
 
-async function cmdModel(args: string[], config: Config, modelsConfig: ModelsConfig | null, updateConfig: (c: Partial<Config>) => void): Promise<void> {
+async function cmdModel(
+  args: string[],
+  config: Config,
+  modelsConfig: ModelsConfig | null,
+  updateConfig: (c: Partial<Config>) => void,
+  liveSwitchModel?: (model: string) => Promise<boolean>,
+): Promise<void> {
   const sub = args[1] || "status";
 
   switch (sub) {
@@ -306,20 +314,22 @@ async function cmdModel(args: string[], config: Config, modelsConfig: ModelsConf
         await saveConfig({
           provider: config.provider,
           model: targetModel,
-          baseURL: config.baseURL === "https://api.openai.com/v1" && config.provider === "deepseek"
-            ? "https://api.deepseek.com/v1" : config.baseURL,
+          baseURL: config.baseURL,
         });
         updateConfig({ model: targetModel });
-        console.log(`${G_GREEN}✓ Switched to ${targetModel}${R}`);
-        console.log(`${G_DIM}Restart to apply this change.${R}`);
+        // Try live switch, fall back to restart
+        const liveOk = liveSwitchModel ? await liveSwitchModel(targetModel) : false;
+        if (!liveOk) {
+          console.log(`${G_DIM}Restart jawere to apply the change.${R}`);
+        }
         return;
       }
 
-      const provider = modelsConfig.providers[config.provider];
-      if (!provider) {
+      const providerEntry = modelsConfig.providers[config.provider];
+      if (!providerEntry) {
         console.log(`${G_YELLOW}Provider ${config.provider} not in models.json — saving anyway${R}`);
       } else {
-        const exists = provider.models.some((m) => m.id === targetModel);
+        const exists = providerEntry.models.some((m) => m.id === targetModel);
         if (!exists) {
           console.log(`${G_YELLOW}Warning:${R} "${targetModel}" not listed for ${config.provider} in models.json`);
           console.log(`${G_DIM}Proceeding anyway...${R}`);
@@ -329,11 +339,22 @@ async function cmdModel(args: string[], config: Config, modelsConfig: ModelsConf
       await saveConfig({
         provider: config.provider as SavedConfig["provider"],
         model: targetModel,
-        baseURL: provider?.baseURL || config.baseURL,
+        baseURL: providerEntry?.baseURL || config.baseURL,
       });
       updateConfig({ model: targetModel });
       console.log(`${G_GREEN}✓ Model switched to ${G_FG}${targetModel}${R}`);
-      console.log(`${G_DIM}Restart jawere to apply the change.${R}`);
+
+      // Try live switch via Pi RPC, fall back to restart
+      if (liveSwitchModel) {
+        const liveOk = await liveSwitchModel(targetModel);
+        if (liveOk) {
+          console.log(`${G_GREEN2}⟳ Applied live — no restart needed${R}`);
+        } else {
+          console.log(`${G_DIM}Restart jawere to apply the change.${R}`);
+        }
+      } else {
+        console.log(`${G_DIM}Restart jawere to apply the change.${R}`);
+      }
       break;
     }
 
@@ -343,7 +364,12 @@ async function cmdModel(args: string[], config: Config, modelsConfig: ModelsConf
   }
 }
 
-async function cmdProvider(args: string[], config: Config, modelsConfig: ModelsConfig | null): Promise<void> {
+async function cmdProvider(
+  args: string[],
+  config: Config,
+  modelsConfig: ModelsConfig | null,
+  liveSwitchProvider?: (provider: string, model: string) => Promise<boolean>,
+): Promise<void> {
   const sub = args[1] || "status";
 
   switch (sub) {
@@ -402,7 +428,18 @@ async function cmdProvider(args: string[], config: Config, modelsConfig: ModelsC
       });
       console.log(`${G_GREEN}✓ Provider switched to ${G_FG}${target}${R} (model: ${defaultModel})`);
       console.log(`${G_YELLOW}Note:${R} You may need to set an API key with ${G_FG}/key add${R}`);
-      console.log(`${G_DIM}Restart jawere to apply the change.${R}`);
+
+      // Try live switch via Pi RPC (Pi resolves keys from its own store)
+      if (liveSwitchProvider) {
+        const liveOk = await liveSwitchProvider(target, defaultModel);
+        if (liveOk) {
+          console.log(`${G_GREEN2}⟳ Applied live — no restart needed${R}`);
+        } else {
+          console.log(`${G_DIM}Restart jawere to apply the change.${R}`);
+        }
+      } else {
+        console.log(`${G_DIM}Restart jawere to apply the change.${R}`);
+      }
       break;
     }
 
@@ -414,7 +451,12 @@ async function cmdProvider(args: string[], config: Config, modelsConfig: ModelsC
 
 // ── Think command ────────────────────────────────────────────────────
 
-function cmdThink(args: string[], currentConfig: Config, modelsConfig: ModelsConfig | null): void {
+async function cmdThink(
+  args: string[],
+  currentConfig: Config,
+  modelsConfig: ModelsConfig | null,
+  liveSwitchThink?: (level: string) => Promise<boolean>,
+): Promise<void> {
   const levels = modelsConfig?.thinkingLevels ?? {
     off: { description: "No thinking — direct responses" },
     minimal: { description: "Brief reasoning before responding" },
@@ -439,6 +481,18 @@ function cmdThink(args: string[], currentConfig: Config, modelsConfig: ModelsCon
     console.log(`${G_GREEN}✓ Thinking level set to ${G_FG}${sub}${R}`);
     const desc = levels[sub]?.description;
     if (desc) console.log(`  ${G_DIM}${desc}${R}`);
+
+    // Try live switch via Pi RPC
+    if (liveSwitchThink) {
+      const liveOk = await liveSwitchThink(sub);
+      if (liveOk) {
+        console.log(`${G_GREEN2}⟳ Applied live — no restart needed${R}`);
+      } else {
+        console.log(`${G_DIM}Restart jawere to apply the change.${R}`);
+      }
+    } else {
+      console.log(`${G_DIM}Restart jawere to apply the change.${R}`);
+    }
   } else {
     console.log(`${G_RED}Unknown level:${R} ${sub}`);
     console.log(`Valid levels: ${Object.keys(levels).join(', ')}`);
@@ -853,6 +907,49 @@ async function main(): Promise<void> {
     toolCount: 0,
     streamedText: [],
   };
+
+  // ── Live switch helpers (use Pi RPC without restart) ────────────
+
+  const tryLiveSwitchModel = async (model: string): Promise<boolean> => {
+    if (!agent) return false;
+    try {
+      await agent.setModel(currentConfig.provider, model);
+      return true;
+    } catch {
+      // Live switch failed — caller should restart
+      return false;
+    }
+  };
+
+  const tryLiveSwitchProvider = async (provider: string, model: string): Promise<boolean> => {
+    if (!agent) return false;
+    try {
+      await agent.setModel(provider, model);
+      // Update currentConfig to reflect the live change
+      currentConfig.provider = provider as SavedProvider;
+      currentConfig.model = model;
+      // Reload config so persistent storage stays in sync
+      await saveConfig({
+        provider: provider as SavedProvider,
+        model,
+        baseURL: currentConfig.baseURL,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const tryLiveSwitchThink = async (level: string): Promise<boolean> => {
+    if (!agent) return false;
+    try {
+      await agent.setThinkingLevel(level);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   let sigintCount = 0;
   const sigintHandler = () => {
     sigintCount++;
@@ -870,11 +967,30 @@ async function main(): Promise<void> {
   };
   process.on("SIGINT", sigintHandler);
 
-  while (true) {
-    const input = await prompt();
-    if (!input) continue;
+  // ── System prompt injection ────────────────────────────────────
+  // Pi uses its own system prompt. We inject jawere's context by
+  // prepending it to the first user message of each session.
+  let isFirstPrompt = true;
 
-    if (input.startsWith("/")) {
+  while (true) {
+    const rawInput = await prompt();
+    if (!rawInput) continue;
+
+    // Prepend jawere's system prompt on the first message only
+    let input = rawInput;
+    if (isFirstPrompt) {
+      const systemContext = [
+        "<system-context>",
+        "The following are your working instructions. Follow them for this entire session.",
+        "",
+        buildSystemPrompt(),
+        "</system-context>",
+      ].join("\n");
+      input = systemContext + "\n\n---\n\n" + rawInput;
+      isFirstPrompt = false;
+    }
+
+    if (rawInput.startsWith("/")) {
       const parts = input.slice(1).split(/\s+/);
       const cmd = parts[0].toLowerCase();
 
@@ -890,24 +1006,15 @@ async function main(): Promise<void> {
         case "model":
           await cmdModel(parts, currentConfig, modelsConfig, async (update) => {
             Object.assign(currentConfig, update);
-            // Restart agent with new model
-            agent?.stop();
-            agent = null;
-          });
+          }, tryLiveSwitchModel);
           break;
 
         case "provider":
-          await cmdProvider(parts, currentConfig, modelsConfig);
-          // Provider switch needs fresh agent
-          agent?.stop();
-          agent = null;
+          await cmdProvider(parts, currentConfig, modelsConfig, tryLiveSwitchProvider);
           break;
 
         case "think":
-          cmdThink(parts, currentConfig, modelsConfig);
-          // Restart agent so new thinking level takes effect
-          agent?.stop();
-          agent = null;
+          await cmdThink(parts, currentConfig, modelsConfig, tryLiveSwitchThink);
           break;
 
         case "setup":

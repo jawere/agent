@@ -274,11 +274,18 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 	private commands: (SlashCommand | AutocompleteItem)[];
 	private basePath: string;
 	private fdPath: string | null;
+	private fileListProvider: (() => string[]) | null;
 
-	constructor(commands: (SlashCommand | AutocompleteItem)[] = [], basePath: string, fdPath: string | null = null) {
+	constructor(
+		commands: (SlashCommand | AutocompleteItem)[] = [],
+		basePath: string,
+		fdPath: string | null = null,
+		fileListProvider?: () => string[],
+	) {
 		this.commands = commands;
 		this.basePath = basePath;
 		this.fdPath = fdPath;
+		this.fileListProvider = fileListProvider ?? null;
 	}
 
 	async getSuggestions(
@@ -716,13 +723,21 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 		return score;
 	}
 
-	// Fuzzy file search using fd (fast, respects .gitignore)
+	// Fuzzy file search using fd (fast, respects .gitignore).
+	// Falls back to fileListProvider when fd is not available.
 	private async getFuzzyFileSuggestions(
 		query: string,
 		options: { isQuotedPrefix: boolean; signal: AbortSignal },
 	): Promise<AutocompleteItem[]> {
-		if (!this.fdPath || options.signal.aborted) {
+		if (options.signal.aborted) {
 			return [];
+		}
+
+		// Fall back to in-memory file list when fd is not available
+		if (!this.fdPath) {
+			if (!this.fileListProvider) return [];
+			const files = this.fileListProvider();
+			return this.matchFilesFromList(files, query, options);
 		}
 
 		try {
@@ -769,6 +784,46 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 		} catch {
 			return [];
 		}
+	}
+
+	// Match files from an in-memory list (fallback when fd is not available).
+	// Uses fuzzy matching against basename and full path.
+	private matchFilesFromList(
+		files: string[],
+		query: string,
+		options: { isQuotedPrefix: boolean },
+	): AutocompleteItem[] {
+		const lowerQuery = query.toLowerCase();
+		const scored: Array<{ path: string; score: number }> = [];
+
+		for (const file of files) {
+			const base = basename(file).toLowerCase();
+			const full = file.toLowerCase();
+			let score = 0;
+
+			if (base === lowerQuery) score = 100;
+			else if (base.startsWith(lowerQuery)) score = 80;
+			else if (base.includes(lowerQuery)) score = 50;
+			else if (full.includes(lowerQuery)) score = 30;
+
+			if (score > 0) scored.push({ path: file, score });
+		}
+
+		scored.sort((a, b) => b.score - a.score);
+		const top = scored.slice(0, 20);
+
+		return top.map(({ path }) => {
+			const value = buildCompletionValue(path, {
+				isDirectory: false,
+				isAtPrefix: true,
+				isQuotedPrefix: options.isQuotedPrefix,
+			});
+			return {
+				value,
+				label: basename(path),
+				description: path,
+			};
+		});
 	}
 
 	// Check if we should trigger file completion (called on Tab key)

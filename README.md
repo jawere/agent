@@ -2,7 +2,9 @@
 
 An autonomous AI coding agent that runs in your terminal. Describe tasks in natural language, and the agent reads your codebase, edits files, writes new files, and executes shell commands — all while explaining its decisions.
 
-Built on a monorepo of reusable packages: a multi-provider LLM layer, an agent loop engine, a terminal UI toolkit, and a multi-agent orchestrator.
+Jawere wraps the [Pi Coding Agent](https://github.com/earendil-works/pi) (from [Earendil Works](https://pi.dev)) as its agent runtime, communicating with Pi via JSON-RPC over stdin/stdout. This lets jawere leverage Pi's battle-tested tool-calling loop while providing its own CLI, codebase scanner, session persistence, encrypted key storage, and multi-agent orchestration.
+
+Built on a monorepo of reusable packages: a multi-provider LLM layer, a terminal UI toolkit, and a multi-agent orchestrator.
 
 ## Quick Start
 
@@ -22,6 +24,7 @@ After `npm install`, the pre-commit hook is installed automatically. Tests run b
 
 - **Node.js 22+** (uses built-in test runner, strip-types, and watch mode)
 - **npm 10+** (workspaces support)
+- **[Pi Coding Agent](https://github.com/earendil-works/pi)** installed globally (`npm install -g @earendil-works/pi-coding-agent`) — jawere spawns Pi in RPC mode as its agent runtime
 - A terminal that supports raw mode and bracketed paste (any modern terminal emulator)
 
 ### From Source
@@ -146,21 +149,23 @@ The agent has access to these tools:
 ```
 ┌──────────────────────────────────────────┐
 │                 jawere CLI               │  packages/coding-agent
-│  cli.ts ──► agent-runner.ts ──► tools   │  REPL, session mgmt,
-│                    │                     │  codebase scanner
-└────────────────────┼─────────────────────┘
-                     │
-┌────────────────────┼─────────────────────┐
-│              @jawere/agent               │  packages/agent
-│   Agent class ──► agent-loop.ts          │  Stateful agent, tool
-│   hooks, steering, streaming             │  execution (seq/parallel)
-└────────────────────┼─────────────────────┘
-                     │
-┌────────────────────┼─────────────────────┐
-│                @jawere/ai                │  packages/ai
-│   12 providers ──► ModelRegistry         │  Unified LLM API,
-│   EventStream, token utils, retry        │  key resolution
-└──────────────────────────────────────────┘
+│  cli.ts ──► agent-runner.ts             │  REPL, session mgmt,
+│         │        │                       │  codebase scanner
+│         │  PiRpcAgent ── JSON-RPC ──┐   │  Pi resolver + spawn
+│         │                           │   │
+└─────────┼───────────────────────────┼───┘
+          │                           │
+┌─────────┼───────────────────────────┼───┐
+│   @jawere/ai                        │   │  packages/ai
+│   12 providers ──► ModelRegistry    │   │  Unified LLM API,
+│   EventStream, token utils, retry   │   │  key resolution
+└─────────────────────────────────────┘   │
+                                          │
+┌─────────────────────────────────────────┼───┐
+│              Pi (external)              ◄───┘  earendil-works/pi
+│   Agent loop, tool calling,            │   coding-agent
+│   extensions, skills, prompt templates  │   (global install)
+└─────────────────────────────────────────┘
 ```
 
 ### Packages
@@ -168,8 +173,7 @@ The agent has access to these tools:
 | Package | Purpose |
 |---------|---------|
 | **@jawere/ai** | Multi-provider LLM abstraction with 12+ provider implementations, key resolution from env vars/files/commands/keychain, token estimation, and retry logic |
-| **@jawere/agent** | Agent loop engine with streaming, tool execution (sequential/parallel), lifecycle hooks, steering and follow-up message queues, and abort support |
-| **@jawere/coding-agent** | Application layer: CLI REPL, tool implementations, codebase scanner (generates `.codebase/tree.yaml`), session persistence, and encrypted key storage |
+| **@jawere/coding-agent** | Application layer: CLI REPL, Pi RPC agent wrapper (`PiRpcAgent`), codebase scanner (generates `.codebase/tree.yaml`), session persistence, and encrypted key storage |
 | **@jawere/tui** | Terminal UI components: Gruvbox-themed display formatter, multiline prompt with paste support, and braille spinner |
 | **@jawere/orchestrator** | Multi-agent orchestration: spawn, manage, and coordinate agent instances via JSON-RPC (early stage) |
 
@@ -206,19 +210,20 @@ npm install       # installs deps + pre-commit hook
 │   │   ├── complete.ts     # High-level API (streamSimple, oneShot, chat)
 │   │   ├── api-keys.ts     # Dynamic key resolution ($VAR, !cmd, file:, keychain:)
 │   │   └── *.test.ts       # 64 tests
-│   ├── agent/src/          # Agent loop engine
-│   │   ├── agent.ts        # Agent class (subscribe, prompt, steer, followUp)
-│   │   ├── agent-loop.ts   # Low-level tool-calling loop
-│   │   └── *.test.ts       # 2 tests
-│   ├── coding-agent/src/   # CLI + tools + scanner
+│   ├── coding-agent/src/   # CLI + Pi RPC wrapper + scanner
 │   │   ├── cli.ts          # REPL main loop
-│   │   ├── tools.ts        # 11 tool implementations
+│   │   ├── agent-runner.ts # Agent event handler (consumes Pi AgentEvents)
+│   │   ├── pi-rpc-agent.ts # Spawns Pi in RPC mode, JSONL communication
+│   │   ├── pi-resolver.ts  # Finds user's Pi binary, verifies RPC support
 │   │   ├── scanner.ts      # Background codebase scanner
-│   │   └── *.test.ts       # 22 tests (crypto + db)
+│   │   ├── scanner/        # Scanner modules (classifier, summarizer, tree-builder)
+│   │   └── *.test.ts       # 10 tests (crypto only)
 │   ├── tui/src/            # Terminal UI
 │   │   ├── display.ts      # Gruvbox-themed output formatting
 │   │   ├── prompt.ts       # Multiline input with paste detection
 │   │   └── *.test.ts       # 19 tests
+│   ├── pi-tui/src/         # Pi TUI integration layer
+│   │   └── index.ts
 │   └── orchestrator/src/   # Multi-agent management
 │       ├── supervisor.ts   # Instance CRUD + session ops
 │       └── *.test.ts       # 15 tests
@@ -246,6 +251,23 @@ A pre-commit hook runs `npm test` on every commit. Install it manually with:
 ```bash
 npm run precommit:install
 ```
+
+## How It Works with Pi
+
+Jawere spawns a globally installed Pi process in RPC mode (`pi --mode rpc`) and communicates via JSONL over stdin/stdout. This design:
+
+- **Leverages Pi's agent loop** — Pi handles the LLM conversation, tool execution, extensions, skills, and prompt templates natively
+- **Keeps jawere's UI layer** — The TUI (prompt input, output formatting, session browser) remains a thin presentation layer over Pi's agent events
+- **Streams events** — Pi emits structured events (`turn_start`, `tool_execution_*`, `turn_end`, `agent_end`) which jawere formats and displays in real time
+- **Handles extension UI** — When Pi extensions need user interaction (select, confirm, input), jawere's TUI renders the prompts inline
+
+Pi must be installed separately:
+
+```bash
+npm install -g @earendil-works/pi-coding-agent
+```
+
+See [Pi's documentation](https://pi.dev/docs/latest) for more on extensions, skills, and prompt templates.
 
 ## License
 

@@ -111,7 +111,7 @@ export class PiRpcAgent {
   private exited = false;
   private exitError: Error | null = null;
 
-  private config: Config;
+  config: Config;
   private extensionUIHandler: ExtensionUIHandler | null = null;
 
   constructor(config: Config, extensionUIHandler?: ExtensionUIHandler) {
@@ -187,6 +187,33 @@ export class PiRpcAgent {
     } catch {
       return []; // Pi may not support get_commands yet
     }
+  }
+
+  /**
+   * Set model live via Pi's RPC (no restart needed).
+   * Pi resolves API keys from its own key store + env vars.
+   */
+  async setModel(provider: string, modelId: string): Promise<void> {
+    if (!this.process || this.exited) {
+      throw new Error("Agent not running — cannot switch model live");
+    }
+    const response = await this.send({ type: "set_model", provider, modelId });
+    this.getData(response); // throws on error
+    // Update our cached config so future restarts use the new model
+    this.config.provider = provider as Config["provider"];
+    this.config.model = modelId;
+  }
+
+  /**
+   * Set thinking level live via Pi's RPC (no restart needed).
+   */
+  async setThinkingLevel(level: string): Promise<void> {
+    if (!this.process || this.exited) {
+      throw new Error("Agent not running — cannot switch thinking level live");
+    }
+    const response = await this.send({ type: "set_thinking_level", level });
+    this.getData(response); // throws on error
+    this.config.thinkingLevel = level;
   }
 
   /** Stop the Pi process */
