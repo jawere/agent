@@ -15,6 +15,8 @@ export interface Config {
   keyFromFile: boolean;
   /** Whether running in dev mode */
   isDev: boolean;
+  /** Thinking level (off, minimal, low, medium, high, xhigh) */
+  thinkingLevel: string;
 }
 
 const PROVIDER_DEFAULTS: Record<SavedProvider, { baseURL: string; model: string }> = {
@@ -93,6 +95,11 @@ export async function loadConfig(): Promise<Config> {
     || savedConfig?.model
     || defaults.model;
 
+  // thinkingLevel: env var > saved config > default (medium)
+  const thinkingLevel = process.env.AI_THINKING_LEVEL
+    || savedConfig?.thinkingLevel
+    || 'medium';
+
   const isDev = isDevMode();
 
   cachedConfig = {
@@ -100,6 +107,7 @@ export async function loadConfig(): Promise<Config> {
     apiKey,
     model,
     provider,
+    thinkingLevel,
     workDir: process.env.WORK_DIR || process.cwd(),
     keyFromFile,
     isDev,

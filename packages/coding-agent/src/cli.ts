@@ -15,7 +15,10 @@ import {
 } from "./crypto.js";
 import { createPrompt } from "@jawere/tui";
 import { runScanner, loadFileList } from "./scanner.js";
-import { PersistentAgent, type DisplayState, createDisplaySubscriber } from "./agent-runner.js";
+import { type DisplayState, createDisplaySubscriber } from "./agent-runner.js";
+import { PiRpcAgent, type ExtensionUIHandler, type ExtensionUIRequest, type ExtensionUIResponse } from "./pi-rpc-agent.js";
+import type { SlashCommand } from "@jawere/pi-tui";
+import { resolvePiBinary, getPiInstallInstructions, type PiInfo } from "./pi-resolver.js";
 import { createSpinner } from "@jawere/tui";
 
 // Gruvbox dark palette
@@ -28,6 +31,7 @@ const G_RED    = "\x1b[38;2;251;73;52m";  // #fb4934
 const G_YELLOW = "\x1b[38;2;250;189;47m"; // #fabd2f
 const G_BLUE   = "\x1b[38;2;131;165;152m";// #83a598
 const G_ORANGE = "\x1b[38;2;254;128;25m"; // #fe8019
+const G_MAGENTA = "\x1b[38;2;211;134;155m"; // #d3869b — Gruvbox purple
 const R = "\x1b[0m";
 
 function center(text: string, width: number): string {
@@ -36,13 +40,16 @@ function center(text: string, width: number): string {
   return " ".repeat(pad) + text;
 }
 
-function printBanner(config: { model: string; provider: string; isDev: boolean }) {
+function printBanner(config: { model: string; provider: string; isDev: boolean; thinkingLevel?: string }) {
   const cols = process.stdout.columns || 60;
   const sep = G_DIM + "─".repeat(Math.min(cols - 2, 50)) + R;
+  const thinkingStr = config.thinkingLevel && config.thinkingLevel !== "off"
+    ? ` ${G_DIM}think:${R}${G_MAGENTA}${config.thinkingLevel}${R}`
+    : "";
   console.log("");
   console.log(
     center(
-      `${G_GREEN}${config.provider}${R} ${G_DIM}/${R} ${G_FG}${config.model}${R}  ${G_DIM}${config.isDev ? "dev" : "prod"}${R}`,
+      `${G_GREEN}${config.provider}${R} ${G_DIM}/${R} ${G_FG}${config.model}${R}  ${G_DIM}${config.isDev ? "dev" : "prod"}${R}${thinkingStr}`,
       cols,
     ),
   );
@@ -114,9 +121,10 @@ ${G_YELLOW}Commands:${R}
   ${G_FG}/provider${R}                Show current provider
   ${G_FG}/provider list${R}           List all providers
   ${G_FG}/provider switch <name>${R}  Switch provider (updates model too)
+  ${G_FG}/think${R}                   Show current thinking level
+  ${G_FG}/think <level>${R}           Set thinking level (off|minimal|low|medium|high|xhigh)
   ${G_FG}/setup${R}                   Run full setup wizard
   ${G_FG}/clear${R}                   Clear screen
-  ${G_FG}/exit${R}, ${G_FG}/quit${R}             Quit
   ${G_FG}/exit${R}, ${G_FG}/quit${R}             Quit
 `);
 }
@@ -404,6 +412,39 @@ async function cmdProvider(args: string[], config: Config, modelsConfig: ModelsC
   }
 }
 
+// ── Think command ────────────────────────────────────────────────────
+
+function cmdThink(args: string[], currentConfig: Config, modelsConfig: ModelsConfig | null): void {
+  const levels = modelsConfig?.thinkingLevels ?? {
+    off: { description: "No thinking — direct responses" },
+    minimal: { description: "Brief reasoning before responding" },
+    low: { description: "Some reasoning steps" },
+    medium: { description: "Balanced reasoning" },
+    high: { description: "Thorough reasoning for complex tasks" },
+    xhigh: { description: "Maximum reasoning — use for critical/safety tasks" },
+  };
+
+  const sub = args[1];
+
+  if (!sub || sub === "status" || sub === "show") {
+    console.log(`${G_GREEN}Current thinking level:${R} ${G_FG}${currentConfig.thinkingLevel}${R}`);
+    const desc = levels[currentConfig.thinkingLevel]?.description;
+    if (desc) console.log(`  ${G_DIM}${desc}${R}`);
+    console.log(`\n${G_DIM}Available levels: ${Object.keys(levels).join(', ')}${R}`);
+    return;
+  }
+
+  if (sub in levels) {
+    currentConfig.thinkingLevel = sub;
+    console.log(`${G_GREEN}✓ Thinking level set to ${G_FG}${sub}${R}`);
+    const desc = levels[sub]?.description;
+    if (desc) console.log(`  ${G_DIM}${desc}${R}`);
+  } else {
+    console.log(`${G_RED}Unknown level:${R} ${sub}`);
+    console.log(`Valid levels: ${Object.keys(levels).join(', ')}`);
+  }
+}
+
 // ── Setup wizard ────────────────────────────────────────────────────
 
 async function setupWizard(): Promise<void> {
@@ -533,6 +574,122 @@ async function quickUpdate(): Promise<void> {
   }
 }
 
+// ── Extension UI handler ──────────────────────────────────────────
+
+/**
+ * Create a handler for Pi extension UI requests.
+ * Uses readline for simple terminal I/O — the TUI is not active during agent runs.
+ */
+function createExtensionUIHandler(): ExtensionUIHandler {
+  const color = (text: string, c: string) => `${c}${text}${R}`;
+
+  /** Prompt the user with a single-line question, return trimmed answer or undefined */
+  function ask(question: string): Promise<string | undefined> {
+    return new Promise((resolve) => {
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stderr,
+      });
+      rl.question(question, (answer: string) => {
+        rl.close();
+        resolve(answer.trim() || undefined);
+      });
+    });
+  }
+
+  return async (req: ExtensionUIRequest): Promise<ExtensionUIResponse | null> => {
+    switch (req.method) {
+      // ── Dialog methods: require user response ──
+
+      case "select": {
+        const options = req.options ?? [];
+        if (options.length === 0) {
+          return { type: "extension_ui_response", id: req.id, cancelled: true };
+        }
+        process.stderr.write(`\n${color(req.title ?? "Select", G_MAGENTA)}\n`);
+        options.forEach((opt, i) => {
+          process.stderr.write(`  ${G_GREEN}${i + 1}${R}. ${G_FG}${opt}${R}\n`);
+        });
+        const answer = await ask(`${G_DIM}Choose [1-${options.length}]:${R} `);
+        const idx = answer ? parseInt(answer, 10) - 1 : -1;
+        if (idx >= 0 && idx < options.length) {
+          return { type: "extension_ui_response", id: req.id, value: options[idx] };
+        }
+        return { type: "extension_ui_response", id: req.id, cancelled: true };
+      }
+
+      case "confirm": {
+        const msg = req.message ? `${req.title}: ${req.message}` : (req.title ?? "Confirm?");
+        process.stderr.write(`\n${color(msg, G_MAGENTA)}\n`);
+        const answer = await ask(`${G_DIM}[y/N]:${R} `);
+        const confirmed = answer?.toLowerCase() === "y" || answer?.toLowerCase() === "yes";
+        return { type: "extension_ui_response", id: req.id, confirmed };
+      }
+
+      case "input": {
+        const prompt = req.placeholder
+          ? `${req.title ?? "Input"} ${G_DIM}(${req.placeholder})${R}: `
+          : `${req.title ?? "Input"}: `;
+        process.stderr.write(`\n`);
+        const answer = await ask(prompt);
+        if (answer !== undefined) {
+          return { type: "extension_ui_response", id: req.id, value: answer };
+        }
+        return { type: "extension_ui_response", id: req.id, cancelled: true };
+      }
+
+      case "editor": {
+        // Simplified: single-line input (full multi-line editor would need TUI)
+        if (req.prefill) {
+          process.stderr.write(`\n${color(req.title ?? "Editor", G_MAGENTA)} ${G_DIM}[prefill: ${req.prefill.slice(0, 60)}]${R}\n`);
+        } else {
+          process.stderr.write(`\n${color(req.title ?? "Editor", G_MAGENTA)}\n`);
+        }
+        const answer = await ask(`${G_DIM}Text:${R} `);
+        if (answer !== undefined) {
+          return { type: "extension_ui_response", id: req.id, value: answer };
+        }
+        return { type: "extension_ui_response", id: req.id, cancelled: true };
+      }
+
+      // ── Fire-and-forget: log and return null (no response needed) ──
+
+      case "notify": {
+        const nType = req.notifyType ?? "info";
+        const c = nType === "error" ? G_RED : nType === "warning" ? G_YELLOW : G_MAGENTA;
+        process.stderr.write(`\n${c}[${nType}]${R} ${req.message ?? ""}\n`);
+        return null;
+      }
+
+      case "setStatus":
+        process.stderr.write(`\n${G_DIM}[status: ${req.statusKey}]${R} ${req.statusText ?? "(cleared)"}\n`);
+        return null;
+
+      case "setWidget": {
+        if (req.widgetLines && req.widgetLines.length > 0) {
+          process.stderr.write(`\n${G_DIM}[widget: ${req.widgetKey}]${R}\n`);
+          for (const wl of req.widgetLines) {
+            process.stderr.write(`  ${G_DIM}${wl}${R}\n`);
+          }
+        }
+        return null;
+      }
+
+      case "setTitle":
+        process.stderr.write(`\n${G_DIM}[title: ${req.title}]${R}\n`);
+        return null;
+
+      case "set_editor_text":
+        // We don't have an active editor during agent runs — log it
+        process.stderr.write(`\n${G_DIM}[editor text set: ${(req.text ?? "").slice(0, 80)}]${R}\n`);
+        return null;
+
+      default:
+        return { type: "extension_ui_response", id: req.id, cancelled: true };
+    }
+  };
+}
+
 // ── Main ────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -589,9 +746,17 @@ async function main(): Promise<void> {
   try {
     const scanResult = await runScanner(config.workDir);
     if (scanResult.cached) {
-      process.stderr.write(` ${G_DIM}(${scanResult.fileCount} files cached)${R}\n`);
+      process.stderr.write(` ${G_DIM}(${scanResult.fileCount} files cached)${R}`);
+      if (scanResult.changedCount && scanResult.changedCount > 0) {
+        process.stderr.write(` ${G_YELLOW}· ${scanResult.changedCount} changed${R}`);
+      }
+      process.stderr.write(`\n`);
     } else {
-      process.stderr.write(` ${G_GREEN2}done${R} ${G_DIM}· ${scanResult.fileCount} files indexed${R}\n`);
+      process.stderr.write(` ${G_GREEN2}done${R} ${G_DIM}· ${scanResult.fileCount} files indexed${R}`);
+      if (scanResult.changedCount && scanResult.changedCount > 0) {
+        process.stderr.write(` ${G_YELLOW}· ${scanResult.changedCount} changed${R}`);
+      }
+      process.stderr.write(`\n`);
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -610,11 +775,63 @@ async function main(): Promise<void> {
     process.stderr.write(`${G_DIM}Agent self-docs: .codebase/AGENT_DOCS.md${R}\n`);
   }
 
+  // Phase 4: Detect Pi binary (stderr — async, parallel with file list)
+  let piInfo: PiInfo | null = null;
+  const piDetectPromise = (async () => {
+    try {
+      piInfo = await resolvePiBinary();
+    } catch { /* handled below */ }
+    if (piInfo) {
+      process.stderr.write(
+        `${G_GREEN}●${R} Pi ${G_GREEN2}v${piInfo.version}${R} ${G_DIM}at ${piInfo.path}${R} ` +
+        `${piInfo.rpcSupported ? `${G_GREEN2}RPC ✓${R}` : `${G_RED}RPC ✗${R}`}\n`,
+      );
+    } else {
+      process.stderr.write(`${G_YELLOW}⚠ Pi not found on PATH${R}\n`);
+    }
+  })();
+
   // Load file list for @-tag autocomplete
   const fileList = await loadFileList(config.workDir);
 
+  // Wait for Pi detection to finish
+  await piDetectPromise;
+
+  // Fetch Pi commands and merge with jawere built-ins
+  const builtInCommands: SlashCommand[] = [
+    { name: "help", description: "Show help" },
+    { name: "key", description: "Manage API keys", argumentHint: "add|delete|list" },
+    { name: "model", description: "Switch or list models", argumentHint: "list|switch <model>" },
+    { name: "provider", description: "Switch or list providers", argumentHint: "list|switch <provider>" },
+    { name: "think", description: "Set thinking level", argumentHint: "off|minimal|low|medium|high|xhigh" },
+    { name: "setup", description: "Run setup wizard" },
+    { name: "clear", description: "Clear the screen" },
+    { name: "config", description: "Show current configuration" },
+    { name: "exit", description: "Exit jawere" },
+    { name: "quit", description: "Exit jawere" },
+  ];
+
+  let piCommands: SlashCommand[] = [];
+  if ((piInfo as PiInfo | null)?.rpcSupported) {
+    try {
+      // Create a temp agent just to fetch commands
+      const probeAgent = new PiRpcAgent(config);
+      piCommands = (await probeAgent.getCommands()).map((cmd) => ({
+        name: cmd.name,
+        description: cmd.description ?? `Pi ${cmd.source}`,
+      }));
+      probeAgent.stop();
+    } catch {
+      // Pi commands unavailable — use built-ins only
+    }
+  }
+
+  const allCommands = [...builtInCommands, ...piCommands];
+
   const { prompt, enableBracketedPaste, disableBracketedPaste } = createPrompt({
     getFiles: () => fileList,
+    commands: allCommands,
+    basePath: config.workDir,
   });
   enableBracketedPaste();
 
@@ -629,11 +846,12 @@ async function main(): Promise<void> {
   };
 
   let runningAbort: AbortController | null = null;
-  let agent: PersistentAgent | null = null;
+  let agent: PiRpcAgent | null = null;
   const displayState: DisplayState = {
     spinner: createSpinner(),
     pendingToolArgs: new Map(),
     toolCount: 0,
+    streamedText: [],
   };
   let sigintCount = 0;
   const sigintHandler = () => {
@@ -673,6 +891,7 @@ async function main(): Promise<void> {
           await cmdModel(parts, currentConfig, modelsConfig, async (update) => {
             Object.assign(currentConfig, update);
             // Restart agent with new model
+            agent?.stop();
             agent = null;
           });
           break;
@@ -680,6 +899,14 @@ async function main(): Promise<void> {
         case "provider":
           await cmdProvider(parts, currentConfig, modelsConfig);
           // Provider switch needs fresh agent
+          agent?.stop();
+          agent = null;
+          break;
+
+        case "think":
+          cmdThink(parts, currentConfig, modelsConfig);
+          // Restart agent so new thinking level takes effect
+          agent?.stop();
           agent = null;
           break;
 
@@ -697,6 +924,7 @@ async function main(): Promise<void> {
           console.log(`${G_YELLOW}Current configuration:${R}`);
           console.log(`  Provider: ${G_FG}${currentConfig.provider}${R}`);
           console.log(`  Model: ${G_FG}${currentConfig.model}${R}`);
+          console.log(`  Thinking: ${G_FG}${currentConfig.thinkingLevel}${R}`);
           console.log(`  Base URL: ${G_DIM}${currentConfig.baseURL}${R}`);
           console.log(`  Work Dir: ${G_DIM}${currentConfig.workDir}${R}`);
           console.log(`  Key from: ${currentConfig.keyFromFile ? "encrypted file" : "env variable"}`);
@@ -706,6 +934,7 @@ async function main(): Promise<void> {
 
         case "exit":
         case "quit":
+          agent?.stop();
           console.log("Goodbye!");
           disableBracketedPaste();
           process.exit(0);
@@ -722,11 +951,13 @@ async function main(): Promise<void> {
 
       // (Re)create agent if needed (lazy init on first prompt or after model switch)
       if (!agent) {
-        agent = new PersistentAgent(currentConfig);
+        agent = new PiRpcAgent(currentConfig);
         agent.subscribe(createDisplaySubscriber(displayState));
+        agent.setExtensionUIHandler(createExtensionUIHandler());
       }
 
       await agent.prompt(input, runningAbort.signal);
+      await agent.waitForIdle();
       runningAbort = null;
 
 

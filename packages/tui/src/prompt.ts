@@ -9,6 +9,8 @@ import {
   TUI,
   matchesKey,
   Key,
+  CombinedAutocompleteProvider,
+  type SlashCommand,
 } from "@jawere/pi-tui";
 
 // Gruvbox dark palette
@@ -48,28 +50,6 @@ function simplePrompt(): Promise<string> {
   });
 }
 
-// ── Slash commands for autocomplete ──────────────────────────────
-
-const SLASH_COMMANDS: string[] = [
-  "/help",
-  "/key",
-  "/key add",
-  "/key delete",
-  "/key list",
-  "/model",
-  "/model list",
-  "/model list all",
-  "/model switch ",
-  "/provider",
-  "/provider list",
-  "/provider switch ",
-  "/setup",
-  "/clear",
-  "/config",
-  "/exit",
-  "/quit",
-];
-
 // ── TUI-powered multiline prompt ──────────────────────────────────
 
 function multilinePrompt(opts?: PromptOptions): Promise<string> {
@@ -77,6 +57,17 @@ function multilinePrompt(opts?: PromptOptions): Promise<string> {
     const terminal = new ProcessTerminal();
     const tui = new TUI(terminal);
     const editor = new Editor(tui, editorTheme, { paddingX: 1 });
+
+    // Wire autocomplete: / commands + @ file paths (fs-based)
+    const slashCommands: SlashCommand[] = opts?.commands ?? [];
+    if (slashCommands.length > 0) {
+      const provider = new CombinedAutocompleteProvider(
+        slashCommands,
+        opts?.basePath ?? process.cwd(),
+        null, // fdPath — use built-in fs scanning
+      );
+      editor.setAutocompleteProvider(provider);
+    }
 
     let submitted = false;
 
@@ -157,10 +148,12 @@ function matchTagFiles(query: string, files: string[]): string[] {
 // ── Public API ───────────────────────────────────────────────────
 
 export interface PromptOptions {
-  /** File list for @-tag autocomplete. Called each time @ is typed. */
+  /** File list for @-tag autocomplete. Called once at prompt creation. */
   getFiles?: () => string[];
-  /** Slash commands for / autocomplete */
-  commands?: string[];
+  /** Slash commands for / autocomplete (name + optional description) */
+  commands?: SlashCommand[];
+  /** Base path for file autocomplete */
+  basePath?: string;
 }
 
 export function createPrompt(opts?: PromptOptions): {

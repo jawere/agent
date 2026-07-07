@@ -21,8 +21,7 @@
     "test": "node --test --experimental-strip-types src/*.test.ts"
   },
   "dependencies": {
-    "@jawere/ai": "*",
-    "@jawere/agent": "*"
+    "@jawere/ai": "*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

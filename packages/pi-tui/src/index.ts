@@ -47,6 +47,7 @@ export {
 // Keyboard input handling
 export {
 	decodeKittyPrintable,
+	decodePrintableKey,
 	isKeyRelease,
 	isKeyRepeat,
 	isKittyProtocolActive,
@@ -112,3 +113,9 @@ export {
 } from "./tui.ts";
 // Utilities
 export { sliceByColumn, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "./utils.ts";
+
+// Word navigation
+export { findWordBackward, findWordForward, type WordNavigationOptions } from "./word-navigation.ts";
+
+// Kill ring
+export { KillRing } from "./kill-ring.ts";

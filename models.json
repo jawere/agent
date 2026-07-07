@@ -9,7 +9,7 @@
       "baseURL": "https://api.deepseek.com/v1",
       "envKey": "DEEPSEEK_API_KEY",
       "models": [
-        { "id": "deepseek-v4-pro", "name": "DeepSeek V4 Pro", "contextWindow": 128000 },
+        { "id": "deepseek-v4-pro", "name": "DeepSeek V4 Pro", "contextWindow": 1048576 },
         { "id": "deepseek-chat", "name": "DeepSeek Chat", "contextWindow": 64000 }
       ]
     },
@@ -93,7 +93,7 @@
   },
 
   "defaults": {
-    "thinkingLevel": "off",
+    "thinkingLevel": "medium",
     "timeout": 120
   }
 }

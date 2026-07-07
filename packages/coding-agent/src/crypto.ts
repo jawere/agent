@@ -81,6 +81,7 @@ export interface SavedConfig {
   provider: SavedProvider;
   baseURL?: string;
   model?: string;
+  thinkingLevel?: string;
 }
 
 /** Save provider/model config to ~/.jawere/config.json */

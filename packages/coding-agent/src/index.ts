@@ -1,6 +1,6 @@
 // @jawere/coding-agent — Public API
 
-export { SYSTEM_PROMPT } from "./system-prompt.js";
+export { SYSTEM_PROMPT, buildSystemPrompt } from "./system-prompt.js";
 export { loadConfig, hasApiKey, type Config } from "./config.js";
 export {
   encrypt,
@@ -13,22 +13,27 @@ export {
   deleteKey,
   type SavedConfig,
 } from "./crypto.js";
-export {
-  initDb,
-  closeDb,
-  createSession,
-  listSessions,
-  getSessionMessages,
-  deleteSession,
-  persistMessages,
-  replaceSessionMessages,
-  type SessionRow,
-  type MessageRow,
-} from "./db.js";
 export { runScanner, cacheIsStale, loadChecksums, loadFileList } from "./scanner.js";
-export { runAgent, type RunAgentOptions, type RunAgentResult } from "./agent-runner.js";
-export { TOOL_DEFS, executeTool, type ToolCall, type ToolResult } from "./tools.js";
-export { createAgentTools } from "./agent-tools.js";
+export {
+  indexTestFiles,
+  findTestsForSource,
+  buildTestFilter,
+  packageTestCommand,
+  getChangedPackages,
+  type TestIndexEntry,
+  type DescribeBlock,
+} from "./test-indexer.js";
+export {
+  loadProjectContext,
+  saveProjectContext,
+  createEmptyContext,
+  getChangedFiles,
+  recordFileRead,
+  recordFileModified,
+  isFileStale,
+  type ProjectContext,
+} from "./state-persistence.js";
 
-// Session management (Step 4 — tree-based JSONL)
-export * from "./session/index.js";
+// Pi RPC agent (replaces @jawere/agent for the agent loop)
+export { PiRpcAgent, type ExtensionUIHandler, type ExtensionUIRequest, type ExtensionUIResponse, type AgentEvent, type AgentEventListener, type PiSlashCommand } from "./pi-rpc-agent.js";
+export { createDisplaySubscriber, type DisplayState } from "./agent-runner.js";

@@ -15,3 +15,6 @@ AGENT_ISSUES.md
 
 # Agent logic traces (large, session-specific)
 .logic/
+
+# Pi coding agent runtime
+pi/

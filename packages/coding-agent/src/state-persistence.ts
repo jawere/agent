@@ -5,6 +5,7 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { resolve, dirname } from 'path';
+import type { TestIndexEntry as TestIndexerEntry } from './test-indexer.js';
 
 export interface ProjectContext {
   /** When this context was last updated */
@@ -18,16 +19,10 @@ export interface ProjectContext {
   /** Notes accumulated across sessions */
   notes: string[];
   /** Test descriptions extracted from the codebase */
-  testIndex: TestIndexEntry[];
+  testIndex: TestIndexerEntry[];
 }
 
-export interface TestIndexEntry {
-  file: string;
-  describe: string;
-  tests: string[];
-  /** Source files this test depends on (approximate) */
-  dependsOn: string[];
-}
+export type { TestIndexEntry as TestIndexEntry } from './test-indexer.js';
 
 const CONTEXT_FILE = '.codebase/project-context.json';
 

@@ -1,4 +1,6 @@
 // @jawere/tui — Public API
+// Display helpers, prompt, spinner, tag autocomplete.
+// Re-exports shared utilities from @jawere/pi-tui.
 
 export { createSpinner } from "./spinner.ts";
 export type { Spinner } from "./spinner.ts";
@@ -19,6 +21,9 @@ export {
   matchFiles,
   type TagState,
 } from "./tag-autocomplete.ts";
+
+// ── Re-exports from @jawere/pi-tui (single source of truth) ────
+
 export {
   matchesKey,
   parseKey,
@@ -28,22 +33,27 @@ export {
   isKittyProtocolActive,
   decodeKittyPrintable,
   decodePrintableKey,
-} from "./keys.ts";
+} from "@jawere/pi-tui";
+
 export {
   fuzzyMatch,
   fuzzyFilter,
   type FuzzyMatch,
-} from "./fuzzy.ts";
+} from "@jawere/pi-tui";
+
 export {
   visibleWidth,
   truncateToWidth,
   wrapTextWithAnsi,
-} from "./utils.ts";
+} from "@jawere/pi-tui";
+
 export {
   findWordBackward,
   findWordForward,
-} from "./word-navigation.ts";
-export { KillRing } from "./kill-ring.ts";
+} from "@jawere/pi-tui";
+
+export { KillRing } from "@jawere/pi-tui";
+
 export {
   TUI_KEYBINDINGS,
   KeybindingsManager,
@@ -52,4 +62,4 @@ export {
   type Keybinding,
   type KeybindingDefinitions,
   type KeybindingsConfig,
-} from "./keybindings.ts";
+} from "@jawere/pi-tui";
