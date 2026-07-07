@@ -1,9 +1,13 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": "./src"
-  },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"outDir": "./dist",
+		"paths": {
+			"@jawere/ai": ["../ai/dist/index.d.ts"],
+			"@jawere/ai/*": ["../ai/dist/*.d.ts", "../ai/dist/providers/*.d.ts"]
+		},
+		"rootDir": "./src"
+	},
+	"include": ["src/**/*.ts"],
+	"exclude": ["node_modules", "dist", "**/*.d.ts", "src/**/*.d.ts"]
 }
