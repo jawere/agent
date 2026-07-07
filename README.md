@@ -247,10 +247,6 @@ A pre-commit hook runs `npm test` on every commit. Install it manually with:
 npm run precommit:install
 ```
 
-## Credits
-
-Jawere is built on [Pi](https://github.com/earendil-works/pi) — an open-source AI agent framework by [Earendil Works](https://github.com/earendil-works). Pi provides the core agent loop engine, multi-provider LLM abstraction, terminal UI toolkit, and multi-agent orchestrator that power Jawere's autonomous coding capabilities.
-
 ## License
 
 MIT
