@@ -1,35 +1,48 @@
-// @jawere/ai — Public API exports
+export type { Static, TSchema } from "typebox";
+export { Type } from "typebox";
 
-// Types
+// Core only, side-effect free: no generated catalogs, no provider factories,
+// no api-registry, no OAuth implementations, no compat. Provider factories
+// live under "@earendil-works/pi-ai/providers/*", API implementations under
+// "@earendil-works/pi-ai/api/*", the old global API under
+// "@earendil-works/pi-ai/compat".
+export type { AnthropicEffort, AnthropicOptions, AnthropicThinkingDisplay } from "./api/anthropic-messages.ts";
+export type { AzureOpenAIResponsesOptions } from "./api/azure-openai-responses.ts";
+export type { BedrockOptions, BedrockThinkingDisplay } from "./api/bedrock-converse-stream.ts";
+export type { GoogleOptions } from "./api/google-generative-ai.ts";
+export type { GoogleThinkingLevel } from "./api/google-shared.ts";
+export type { GoogleVertexOptions } from "./api/google-vertex.ts";
+export * from "./api/lazy.ts";
+export type { MistralOptions } from "./api/mistral-conversations.ts";
+export type { OpenAICodexResponsesOptions, OpenAICodexWebSocketDebugStats } from "./api/openai-codex-responses.ts";
+export type { OpenAICompletionsOptions } from "./api/openai-completions.ts";
+export type { OpenAIResponsesOptions } from "./api/openai-responses.ts";
+export * from "./auth/context.ts";
+export * from "./auth/credential-store.ts";
+export * from "./auth/helpers.ts";
+export * from "./auth/types.ts";
+export * from "./images-models.ts";
+export * from "./models.ts";
+export * from "./providers/faux.ts";
+export * from "./session-resources.ts";
 export * from "./types.ts";
-
-// Utilities
-export * from "./event-stream.ts";
-export * from "./utils.ts";
-export * from "./api-keys.ts";
-export * from "./complete.ts";
-
-// Model registry
-export { ModelRegistry, getModelRegistry, setModelRegistry } from "./models.ts";
-
-// Provider exports
-export { openAIProvider } from "./providers/openai.ts";
-export { deepseekProvider } from "./providers/deepseek.ts";
-export { anthropicProvider } from "./providers/anthropic.ts";
-export { googleGenerativeAIProvider, googleVertexProvider } from "./providers/google.ts";
-export { azureOpenAIProvider } from "./providers/azure.ts";
-export { bedrockProvider } from "./providers/bedrock.ts";
-export { mistralProvider } from "./providers/mistral.ts";
-export { githubCopilotProvider } from "./providers/github-copilot.ts";
-export { openRouterProvider } from "./providers/openrouter.ts";
-export { cloudflareProvider } from "./providers/cloudflare.ts";
-export {
-  openAICompatibleProvider,
-  groqProvider,
-  xAIProvider,
-  fireworksProvider,
-  togetherProvider,
-} from "./providers/openai-compatible.ts";
-export type { OpenAICompatibleProviderConfig } from "./providers/openai-compatible.ts";
-export type { CloudflareConfig } from "./providers/cloudflare.ts";
-export type { GitHubCopilotConfig } from "./providers/github-copilot.ts";
+export * from "./utils/diagnostics.ts";
+export * from "./utils/event-stream.ts";
+export * from "./utils/json-parse.ts";
+export type {
+	OAuthAuthInfo,
+	OAuthCredentials,
+	OAuthDeviceCodeInfo,
+	OAuthLoginCallbacks,
+	OAuthPrompt,
+	OAuthProvider,
+	OAuthProviderId,
+	OAuthProviderInfo,
+	OAuthProviderInterface,
+	OAuthSelectOption,
+	OAuthSelectPrompt,
+} from "./utils/oauth/types.ts";
+export * from "./utils/overflow.ts";
+export * from "./utils/retry.ts";
+export * from "./utils/typebox-helpers.ts";
+export * from "./utils/validation.ts";
