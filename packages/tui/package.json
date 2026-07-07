@@ -21,7 +21,6 @@
     "test": "node --test --experimental-strip-types src/*.test.ts"
   },
   "dependencies": {
-    "@jawere/pi-tui": "*",
     "get-east-asian-width": "1.6.0"
   },
   "devDependencies": {
