@@ -1,11 +1,10 @@
-// @jawere/orchestrator — Public API
-
-export { Supervisor } from "./supervisor.ts";
-export { RpcProcess, type RpcProcessOptions } from "./rpc-process.ts";
-export type {
-  InstanceInfo,
-  OrchestratorConfig,
-  OrchestratorSupervisor,
-  RpcRequest,
-  RpcResponse,
-} from "./types.ts";
+export * from "./config.ts";
+export * from "./handler.ts";
+export * from "./ipc/client.ts";
+export * from "./ipc/protocol.ts";
+export * from "./ipc/server.ts";
+export * from "./rpc-process.ts";
+export * from "./serve.ts";
+export * from "./storage.ts";
+export * from "./supervisor.ts";
+export * from "./types.ts";
