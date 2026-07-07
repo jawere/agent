@@ -15,7 +15,7 @@
  */
 
 import { mkdtemp, writeFile } from "node:fs/promises";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@jawere/coding-agent";
 import {
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,
@@ -23,7 +23,7 @@ import {
 	type TruncationResult,
 	truncateHead,
 	withFileMutationQueue,
-} from "@earendil-works/pi-coding-agent";
+} from "@jawere/coding-agent";
 import { Text } from "@jawere/tui";
 import { execSync } from "child_process";
 import { tmpdir } from "os";

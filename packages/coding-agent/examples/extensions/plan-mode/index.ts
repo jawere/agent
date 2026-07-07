@@ -14,7 +14,7 @@
 
 import type { AgentMessage } from "@jawere/agent";
 import type { AssistantMessage, TextContent } from "@jawere/ai";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@jawere/coding-agent";
 import { Key } from "@jawere/tui";
 import { extractTodoItems, isSafeCommand, markCompletedSteps, type TodoItem } from "./utils.ts";
 

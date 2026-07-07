@@ -1,16 +1,24 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "Node16",
-    "moduleResolution": "Node16",
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "strict": true,
-    "esModuleInterop": true,
-    "declaration": true,
-    "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true
-  },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+	"extends": "./tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"paths": {
+			"*": ["./*"],
+			"@jawere/ai": ["./packages/ai/src/index.ts"],
+			"@jawere/ai/oauth": ["./packages/ai/src/oauth.ts"],
+			"@jawere/ai/*": ["./packages/ai/src/*.ts", "./packages/ai/src/providers/*.ts"],
+			"@jawere/agent": ["./packages/agent/src/index.ts"],
+			"@jawere/agent/*": ["./packages/agent/src/*"],
+			"@jawere/coding-agent": ["./packages/coding-agent/src/index.ts"],
+			"@jawere/coding-agent/hooks": ["./packages/coding-agent/src/core/hooks/index.ts"],
+			"@jawere/coding-agent/*": ["./packages/coding-agent/src/*"],
+			"@jawere/orchestrator": ["./packages/orchestrator/src/index.ts"],
+			"@jawere/orchestrator/*": ["./packages/orchestrator/src/*"],
+			"@jawere/tui": ["./packages/tui/src/index.ts"],
+			"@jawere/tui/*": ["./packages/tui/src/*"],
+			"typebox": ["./node_modules/typebox"]
+		}
+	},
+	"include": ["packages/*/src/**/*", "packages/*/test/**/*", "packages/coding-agent/examples/**/*"],
+	"exclude": ["**/dist/**", "packages/coding-agent/examples/extensions/gondolin/**"]
 }

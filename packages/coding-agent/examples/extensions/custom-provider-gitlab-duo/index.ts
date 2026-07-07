@@ -22,7 +22,7 @@ import {
 	type SimpleStreamOptions,
 	type ThinkingLevelMap,
 } from "@jawere/ai/compat";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@jawere/coding-agent";
 
 // =============================================================================
 // Constants

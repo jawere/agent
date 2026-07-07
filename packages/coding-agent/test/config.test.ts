@@ -152,8 +152,8 @@ describe("detectInstallMethod", () => {
 		);
 
 		expect(detectInstallMethod()).toBe("pnpm");
-		expect(getUpdateInstruction("@earendil-works/pi-coding-agent")).toBe(
-			"Run: pnpm install -g --ignore-scripts --config.minimumReleaseAge=0 @earendil-works/pi-coding-agent",
+		expect(getUpdateInstruction("@jawere/coding-agent")).toBe(
+			"Run: pnpm install -g --ignore-scripts --config.minimumReleaseAge=0 @jawere/coding-agent",
 		);
 	});
 
@@ -161,16 +161,16 @@ describe("detectInstallMethod", () => {
 		setExecPath("/usr/local/bin/node");
 
 		expect(detectInstallMethod()).toBe("unknown");
-		expect(getSelfUpdateCommand("@earendil-works/pi-coding-agent")).toBeUndefined();
-		expect(getUpdateInstruction("@earendil-works/pi-coding-agent")).toBe(
-			"Update @earendil-works/pi-coding-agent using the package manager, wrapper, or source checkout that provides this installation.",
+		expect(getSelfUpdateCommand("@jawere/coding-agent")).toBeUndefined();
+		expect(getUpdateInstruction("@jawere/coding-agent")).toBe(
+			"Update @jawere/coding-agent using the package manager, wrapper, or source checkout that provides this installation.",
 		);
 	});
 
 	test("self-updates npm installs from custom prefixes", () => {
 		const { prefix } = createNpmPrefixInstall();
 
-		const command = getSelfUpdateCommand("@earendil-works/pi-coding-agent");
+		const command = getSelfUpdateCommand("@jawere/coding-agent");
 
 		expect(detectInstallMethod()).toBe("npm");
 		expect(command).toEqual({
@@ -182,18 +182,18 @@ describe("detectInstallMethod", () => {
 				"-g",
 				"--ignore-scripts",
 				"--min-release-age=0",
-				"@earendil-works/pi-coding-agent",
+				"@jawere/coding-agent",
 			],
-			display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @earendil-works/pi-coding-agent`,
+			display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @jawere/coding-agent`,
 		});
 	});
 
 	test("self-updates exact npm versions without uninstalling the current package", () => {
 		const { prefix } = createNpmPrefixInstall();
 
-		const command = getSelfUpdateCommand("@earendil-works/pi-coding-agent", undefined, {
-			packageName: "@earendil-works/pi-coding-agent",
-			installSpec: "@earendil-works/pi-coding-agent@1.2.3",
+		const command = getSelfUpdateCommand("@jawere/coding-agent", undefined, {
+			packageName: "@jawere/coding-agent",
+			installSpec: "@jawere/coding-agent@1.2.3",
 		});
 
 		expect(command).toEqual({
@@ -205,26 +205,26 @@ describe("detectInstallMethod", () => {
 				"-g",
 				"--ignore-scripts",
 				"--min-release-age=0",
-				"@earendil-works/pi-coding-agent@1.2.3",
+				"@jawere/coding-agent@1.2.3",
 			],
-			display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @earendil-works/pi-coding-agent@1.2.3`,
+			display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @jawere/coding-agent@1.2.3`,
 		});
 	});
 
 	test("self-updates renamed packages from the current install prefix", () => {
 		const { prefix } = createNpmPrefixInstall();
 
-		const command = getSelfUpdateCommand("@mariozechner/pi-coding-agent", undefined, "@new-scope/pi");
+		const command = getSelfUpdateCommand("@jawere/coding-agent", undefined, "@new-scope/pi");
 
 		expect(command).toEqual({
 			command: "npm",
 			args: ["--prefix", prefix, "install", "-g", "--ignore-scripts", "--min-release-age=0", "@new-scope/pi"],
-			display: `npm --prefix ${prefix} uninstall -g @mariozechner/pi-coding-agent && npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @new-scope/pi`,
+			display: `npm --prefix ${prefix} uninstall -g @jawere/coding-agent && npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @new-scope/pi`,
 			steps: [
 				{
 					command: "npm",
-					args: ["--prefix", prefix, "uninstall", "-g", "@mariozechner/pi-coding-agent"],
-					display: `npm --prefix ${prefix} uninstall -g @mariozechner/pi-coding-agent`,
+					args: ["--prefix", prefix, "uninstall", "-g", "@jawere/coding-agent"],
+					display: `npm --prefix ${prefix} uninstall -g @jawere/coding-agent`,
 				},
 				{
 					command: "npm",
@@ -238,7 +238,7 @@ describe("detectInstallMethod", () => {
 	test("self-update respects configured npmCommand", () => {
 		const { prefix } = createNpmPrefixInstall();
 
-		const command = getSelfUpdateCommand("@earendil-works/pi-coding-agent", ["npm", "--prefix", prefix]);
+		const command = getSelfUpdateCommand("@jawere/coding-agent", ["npm", "--prefix", prefix]);
 
 		expect(command).toEqual({
 			command: "npm",
@@ -249,16 +249,16 @@ describe("detectInstallMethod", () => {
 				"-g",
 				"--ignore-scripts",
 				"--min-release-age=0",
-				"@earendil-works/pi-coding-agent",
+				"@jawere/coding-agent",
 			],
-			display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @earendil-works/pi-coding-agent`,
+			display: `npm --prefix ${prefix} install -g --ignore-scripts --min-release-age=0 @jawere/coding-agent`,
 		});
 	});
 
 	test("self-update treats empty npmCommand as unset", () => {
 		const { prefix } = createNpmPrefixInstall();
 
-		const command = getSelfUpdateCommand("@earendil-works/pi-coding-agent", []);
+		const command = getSelfUpdateCommand("@jawere/coding-agent", []);
 
 		expect(command?.args).toEqual([
 			"--prefix",
@@ -267,17 +267,17 @@ describe("detectInstallMethod", () => {
 			"-g",
 			"--ignore-scripts",
 			"--min-release-age=0",
-			"@earendil-works/pi-coding-agent",
+			"@jawere/coding-agent",
 		]);
 	});
 
 	test("quotes npm self-update display paths", () => {
 		const { prefix } = createNpmPrefixInstall("pi prefix ");
 
-		const command = getSelfUpdateCommand("@earendil-works/pi-coding-agent");
+		const command = getSelfUpdateCommand("@jawere/coding-agent");
 
 		expect(command?.display).toBe(
-			`npm --prefix "${prefix}" install -g --ignore-scripts --min-release-age=0 @earendil-works/pi-coding-agent`,
+			`npm --prefix "${prefix}" install -g --ignore-scripts --min-release-age=0 @jawere/coding-agent`,
 		);
 	});
 
@@ -287,40 +287,40 @@ describe("detectInstallMethod", () => {
 		setExecPath(`${packageDir}\\dist\\cli.js`);
 
 		expect(detectInstallMethod()).toBe("npm");
-		expect(getUpdateInstruction("@earendil-works/pi-coding-agent")).toBe(
-			"Run: npm install -g --ignore-scripts --min-release-age=0 @earendil-works/pi-coding-agent",
+		expect(getUpdateInstruction("@jawere/coding-agent")).toBe(
+			"Run: npm install -g --ignore-scripts --min-release-age=0 @jawere/coding-agent",
 		);
 	});
 
 	test("self-updates bun global installs from bun pm bin", () => {
 		createBunGlobalInstall();
 
-		const command = getSelfUpdateCommand("@earendil-works/pi-coding-agent");
+		const command = getSelfUpdateCommand("@jawere/coding-agent");
 
 		expect(detectInstallMethod()).toBe("bun");
 		expect(command).toEqual({
 			command: "bun",
-			args: ["install", "-g", "--ignore-scripts", "--minimum-release-age=0", "@earendil-works/pi-coding-agent"],
-			display: "bun install -g --ignore-scripts --minimum-release-age=0 @earendil-works/pi-coding-agent",
+			args: ["install", "-g", "--ignore-scripts", "--minimum-release-age=0", "@jawere/coding-agent"],
+			display: "bun install -g --ignore-scripts --minimum-release-age=0 @jawere/coding-agent",
 		});
 	});
 
 	test("self-updates renamed pnpm global installs by removing the old package first", () => {
 		createPnpmGlobalInstall();
 
-		const command = getSelfUpdateCommand("@mariozechner/pi-coding-agent", undefined, "@new-scope/pi");
+		const command = getSelfUpdateCommand("@jawere/coding-agent", undefined, "@new-scope/pi");
 
 		expect(detectInstallMethod()).toBe("pnpm");
 		expect(command).toEqual({
 			command: "pnpm",
 			args: ["install", "-g", "--ignore-scripts", "--config.minimumReleaseAge=0", "@new-scope/pi"],
 			display:
-				"pnpm remove -g @mariozechner/pi-coding-agent && pnpm install -g --ignore-scripts --config.minimumReleaseAge=0 @new-scope/pi",
+				"pnpm remove -g @jawere/coding-agent && pnpm install -g --ignore-scripts --config.minimumReleaseAge=0 @new-scope/pi",
 			steps: [
 				{
 					command: "pnpm",
-					args: ["remove", "-g", "@mariozechner/pi-coding-agent"],
-					display: "pnpm remove -g @mariozechner/pi-coding-agent",
+					args: ["remove", "-g", "@jawere/coding-agent"],
+					display: "pnpm remove -g @jawere/coding-agent",
 				},
 				{
 					command: "pnpm",
@@ -335,7 +335,7 @@ describe("detectInstallMethod", () => {
 		const temp = mkdtempSync(join(tmpdir(), "pi-pnpm11-"));
 		const binDir = join(temp, "bin");
 		const root = join(temp, "Library", "pnpm", "global", "v11");
-		const packageName = "@earendil-works/pi-coding-agent";
+		const packageName = "@jawere/coding-agent";
 		const globalPackageDir = join(root, "11e9a", "node_modules", "@earendil-works", "pi-coding-agent");
 		const storePackageDir = join(
 			temp,
@@ -377,18 +377,18 @@ describe("detectInstallMethod", () => {
 	test("self-updates renamed yarn global installs by removing the old package first", () => {
 		createYarnGlobalInstall();
 
-		const command = getSelfUpdateCommand("@mariozechner/pi-coding-agent", undefined, "@new-scope/pi");
+		const command = getSelfUpdateCommand("@jawere/coding-agent", undefined, "@new-scope/pi");
 
 		expect(detectInstallMethod()).toBe("yarn");
 		expect(command).toEqual({
 			command: "yarn",
 			args: ["global", "add", "--ignore-scripts", "@new-scope/pi"],
-			display: "yarn global remove @mariozechner/pi-coding-agent && yarn global add --ignore-scripts @new-scope/pi",
+			display: "yarn global remove @jawere/coding-agent && yarn global add --ignore-scripts @new-scope/pi",
 			steps: [
 				{
 					command: "yarn",
-					args: ["global", "remove", "@mariozechner/pi-coding-agent"],
-					display: "yarn global remove @mariozechner/pi-coding-agent",
+					args: ["global", "remove", "@jawere/coding-agent"],
+					display: "yarn global remove @jawere/coding-agent",
 				},
 				{
 					command: "yarn",
@@ -402,19 +402,19 @@ describe("detectInstallMethod", () => {
 	test("self-updates renamed bun global installs by removing the old package first", () => {
 		createBunGlobalInstall();
 
-		const command = getSelfUpdateCommand("@mariozechner/pi-coding-agent", undefined, "@new-scope/pi");
+		const command = getSelfUpdateCommand("@jawere/coding-agent", undefined, "@new-scope/pi");
 
 		expect(detectInstallMethod()).toBe("bun");
 		expect(command).toEqual({
 			command: "bun",
 			args: ["install", "-g", "--ignore-scripts", "--minimum-release-age=0", "@new-scope/pi"],
 			display:
-				"bun uninstall -g @mariozechner/pi-coding-agent && bun install -g --ignore-scripts --minimum-release-age=0 @new-scope/pi",
+				"bun uninstall -g @jawere/coding-agent && bun install -g --ignore-scripts --minimum-release-age=0 @new-scope/pi",
 			steps: [
 				{
 					command: "bun",
-					args: ["uninstall", "-g", "@mariozechner/pi-coding-agent"],
-					display: "bun uninstall -g @mariozechner/pi-coding-agent",
+					args: ["uninstall", "-g", "@jawere/coding-agent"],
+					display: "bun uninstall -g @jawere/coding-agent",
 				},
 				{
 					command: "bun",
@@ -429,8 +429,8 @@ describe("detectInstallMethod", () => {
 		const { packageDir } = createNpmPrefixInstall();
 		chmodSync(packageDir, 0o500);
 
-		expect(getSelfUpdateCommand("@earendil-works/pi-coding-agent")).toBeUndefined();
-		expect(getSelfUpdateUnavailableInstruction("@earendil-works/pi-coding-agent")).toContain(
+		expect(getSelfUpdateCommand("@jawere/coding-agent")).toBeUndefined();
+		expect(getSelfUpdateUnavailableInstruction("@jawere/coding-agent")).toContain(
 			"the install path is not writable",
 		);
 	});

@@ -2,7 +2,7 @@
 
 An autonomous AI coding agent that runs in your terminal. Describe tasks in natural language, and the agent reads your codebase, edits files, writes new files, and executes shell commands — all while explaining its decisions.
 
-Built on a monorepo of reusable packages: a multi-provider LLM layer, an agent loop engine, a terminal UI toolkit, and a multi-agent orchestrator.
+Built on a monorepo of reusable packages: a multi-provider LLM layer, an agent loop engine, and a terminal UI toolkit.
 
 ## Quick Start
 
@@ -171,7 +171,7 @@ The agent has access to these tools:
 | **@jawere/agent** | Agent loop engine with streaming, tool execution (sequential/parallel), lifecycle hooks, steering and follow-up message queues, and abort support |
 | **@jawere/coding-agent** | Application layer: CLI REPL, tool implementations, codebase scanner (generates `.codebase/tree.yaml`), session persistence, and encrypted key storage |
 | **@jawere/tui** | Terminal UI components: Gruvbox-themed display formatter, multiline prompt with paste support, and braille spinner |
-| **@jawere/orchestrator** | Multi-agent orchestration: spawn, manage, and coordinate agent instances via JSON-RPC (early stage) |
+
 
 ## Development
 
@@ -219,9 +219,8 @@ npm install       # installs deps + pre-commit hook
 │   │   ├── display.ts      # Gruvbox-themed output formatting
 │   │   ├── prompt.ts       # Multiline input with paste detection
 │   │   └── *.test.ts       # 19 tests
-│   └── orchestrator/src/   # Multi-agent management
-│       ├── supervisor.ts   # Instance CRUD + session ops
-│       └── *.test.ts       # 15 tests
+
+
 ├── scripts/
 │   ├── pre-commit          # Runs tests before each commit
 │   └── build.js            # esbuild bundler

@@ -5,7 +5,7 @@
  * without paying for an extra follow-up LLM turn.
  */
 
-import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { defineTool, type ExtensionAPI } from "@jawere/coding-agent";
 import { Text } from "@jawere/tui";
 import { Type } from "typebox";
 

@@ -25,7 +25,7 @@ import {
 	getAgentDir,
 	getMarkdownTheme,
 	withFileMutationQueue,
-} from "@earendil-works/pi-coding-agent";
+} from "@jawere/coding-agent";
 import { Container, Markdown, Spacer, Text } from "@jawere/tui";
 import { Type } from "typebox";
 import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.ts";

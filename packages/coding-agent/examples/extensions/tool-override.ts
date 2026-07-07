@@ -21,7 +21,7 @@
  */
 
 import type { TextContent } from "@jawere/ai";
-import { type ExtensionAPI, getAgentDir, withFileMutationQueue } from "@earendil-works/pi-coding-agent";
+import { type ExtensionAPI, getAgentDir, withFileMutationQueue } from "@jawere/coding-agent";
 import { constants, readFileSync } from "fs";
 import { access, appendFile, readFile } from "fs/promises";
 import { join, resolve } from "path";

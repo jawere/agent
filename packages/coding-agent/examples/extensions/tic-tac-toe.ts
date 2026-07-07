@@ -18,7 +18,7 @@
  */
 
 import { StringEnum } from "@jawere/ai";
-import type { ExtensionAPI, ExtensionContext, Theme, ToolExecutionMode } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, Theme, ToolExecutionMode } from "@jawere/coding-agent";
 import { type Component, matchesKey, Text, truncateToWidth, visibleWidth } from "@jawere/tui";
 import { Type } from "typebox";
 

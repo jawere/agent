@@ -9,7 +9,7 @@
  */
 
 import type { AssistantMessage } from "@jawere/ai";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@jawere/coding-agent";
 import { truncateToWidth, visibleWidth } from "@jawere/tui";
 
 export default function (pi: ExtensionAPI) {

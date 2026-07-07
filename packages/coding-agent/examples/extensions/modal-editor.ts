@@ -9,7 +9,7 @@
  * - ctrl+c, ctrl+d, etc. work in both modes
  */
 
-import { CustomEditor, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { CustomEditor, type ExtensionAPI } from "@jawere/coding-agent";
 import { matchesKey, truncateToWidth, visibleWidth } from "@jawere/tui";
 
 // Normal mode key mappings: key -> escape sequence (or null for mode switch)

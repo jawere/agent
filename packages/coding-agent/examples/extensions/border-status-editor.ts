@@ -3,7 +3,7 @@ import {
 	type ExtensionAPI,
 	type ExtensionContext,
 	type KeybindingsManager,
-} from "@earendil-works/pi-coding-agent";
+} from "@jawere/coding-agent";
 import type { Component, EditorTheme, TUI } from "@jawere/tui";
 import { truncateToWidth, visibleWidth } from "@jawere/tui";
 

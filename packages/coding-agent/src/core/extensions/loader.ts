@@ -21,7 +21,7 @@ import * as _bundledTypeboxCompile from "typebox/compile";
 import * as _bundledTypeboxValue from "typebox/value";
 import { CONFIG_DIR_NAME, getAgentDir, isBunBinary } from "../../config.ts";
 // NOTE: This import works because loader.ts exports are NOT re-exported from index.ts,
-// avoiding a circular dependency. Extensions can import from @earendil-works/pi-coding-agent.
+// avoiding a circular dependency. Extensions can import from @jawere/coding-agent.
 import * as _bundledPiCodingAgent from "../../index.ts";
 import { resolvePath } from "../../utils/paths.ts";
 import { createEventBus, type EventBus } from "../event-bus.ts";
@@ -58,13 +58,13 @@ const VIRTUAL_MODULES: Record<string, unknown> = {
 	"@jawere/ai": _bundledPiAiCompat,
 	"@jawere/ai/compat": _bundledPiAiCompat,
 	"@jawere/ai/oauth": _bundledPiAiOauth,
-	"@earendil-works/pi-coding-agent": _bundledPiCodingAgent,
+	"@jawere/coding-agent": _bundledPiCodingAgent,
 	"@jawere/agent": _bundledPiAgentCore,
 	"@jawere/tui": _bundledPiTui,
 	"@jawere/ai": _bundledPiAiCompat,
 	"@jawere/ai/compat": _bundledPiAiCompat,
 	"@jawere/ai/oauth": _bundledPiAiOauth,
-	"@mariozechner/pi-coding-agent": _bundledPiCodingAgent,
+	"@jawere/coding-agent": _bundledPiCodingAgent,
 };
 
 const require = createRequire(import.meta.url);
@@ -104,13 +104,13 @@ function getAliases(): Record<string, string> {
 	const piAiOauthEntry = resolveWorkspaceOrImport("ai/dist/oauth.js", "@jawere/ai/oauth");
 
 	_aliases = {
-		"@earendil-works/pi-coding-agent": piCodingAgentEntry,
+		"@jawere/coding-agent": piCodingAgentEntry,
 		"@jawere/agent": piAgentCoreEntry,
 		"@jawere/tui": piTuiEntry,
 		"@jawere/ai": piAiCompatEntry,
 		"@jawere/ai/compat": piAiCompatEntry,
 		"@jawere/ai/oauth": piAiOauthEntry,
-		"@mariozechner/pi-coding-agent": piCodingAgentEntry,
+		"@jawere/coding-agent": piCodingAgentEntry,
 		"@jawere/agent": piAgentCoreEntry,
 		"@jawere/tui": piTuiEntry,
 		"@jawere/ai": piAiCompatEntry,
